@@ -23,7 +23,7 @@ const appointmentSchema = new mongoose.Schema({
     // Appointment Details
     packageType: {
         type: String,
-        enum: ['newborn', 'maternity', 'family', 'milestone', 'portrait', 'custom'],
+        enum: ['newborn', 'maternity'],
         required: [true, 'Package type is required'],
         trim: true,
     },
@@ -31,20 +31,49 @@ const appointmentSchema = new mongoose.Schema({
         type: Date,
         required: [true, 'Preferred date is required'],
     },
-    preferredTime: {
+    sessionType: {
         type: String,
-        required: [true, 'Preferred time is required'],
-        trim: true,
-    },
-    durationHours: {
-        type: Number,
-        default: 1,
+        enum: ['morning', 'afternoon'],
+        default: 'morning'
     },
     location: {
         type: String,
         required: [true, 'Location is required'],
         trim: true,
     },
+
+    // Payment Related Fields
+    receiptUrl: {
+        type: String,
+        default: null
+    },
+    paymentMethod: {
+        type: String,
+        enum: ['bank', 'gcash', ],
+        default: 'bank'
+    },
+    paymentAmount: {
+        type: Number,
+        default: null
+    },
+    remainingAmount: {
+    type: Number,
+    default: null
+    },
+    totalAmount: {
+        type: Number,
+        default: null
+    },
+    paymentCompleted: {
+        type: Boolean,
+        default: false
+    },
+    transactionReference: {
+        type: String,
+        default: null
+    },
+
+
     
     // Additional Info
     specialRequests: {

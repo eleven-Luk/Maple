@@ -7,14 +7,11 @@ import connectDB from './config/database.js';
 
 // NM Routes import
 import authRoutes from './routes/authRoutes.js';
-import jobRoutes from '../backend/routes/NM/jobRoutes.js'
-import appliRoutes from '../backend/routes/NM/appliRoutes.js'
-
-import concernRoutes from '../backend/routes/NM/concernRoutes.js'
 
 // Maple Routes import
 import appoRoutes from '../backend/routes/Maple/AppoRoutes.js'
 import sampleRoutes from '../backend/routes/Maple/sampleRoutes.js'
+import concernRoutes from '../backend/routes/Maple/concernRoutes.js'
 
 
 // Load environment variables
@@ -38,12 +35,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve u
 // Public Routes
 app.use('/api/auth', authRoutes);
 
-// Protected Routes NM
-app.use('/api/jobs', jobRoutes);
-app.use('/api/applications', appliRoutes);
-app.use('/api/concerns', concernRoutes);
+
 
 // Protected Routes Maple
+app.use('/api/concerns', concernRoutes);
 app.use('/api/appointments', appoRoutes);
 app.use('/api/samples', sampleRoutes);
 

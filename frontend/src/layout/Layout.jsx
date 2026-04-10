@@ -9,13 +9,15 @@ function Layout ({ children }) {
             {/* Session Timeout - applies to all admin pages */}
             <SessionTimeout timeoutMinutes={60} />
             
-            <div className="sticky top-0 h-screen">
+            <div className="sticky top-0 h-screen w-64 flex-shrink-0">
                 <Sidebar />
             </div>
 
-            {/* MAIN CONTENT AREA - Scrollable */}
-            <main className="flex-1 overflow-hidden">
-                <Outlet />
+            {/* MAIN CONTENT AREA - Scrollable and Full Width */}
+            <main className="flex-1 overflow-x-auto">
+                <div className="min-w-[1200px]">
+                    <Outlet />
+                </div>
             </main>
         </div>
     )

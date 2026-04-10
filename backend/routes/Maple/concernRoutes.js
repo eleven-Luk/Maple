@@ -6,7 +6,7 @@ import {
     getViewConcerns, 
     updateConcerns, 
     deleteConcerns 
-} from '../../controllers/NM/ConcernControl.js';
+} from '../../controllers/Maple/ConcernControl.js';
 import { protect } from '../../middleware/auth.js';
 
 const router = express.Router();

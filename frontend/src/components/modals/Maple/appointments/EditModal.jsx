@@ -17,7 +17,13 @@ import {
     faCheckCircle,
     faSpinner,
     faBan,
-    faCalendarWeek
+    faCalendarWeek,
+    faSun,
+    faCloudSun,
+    faMoneyBillWave,
+    faImage,
+    faInfoCircle,
+    faPercentage
 } from '@fortawesome/free-solid-svg-icons';
 import FormModal from '../../common/FormModal';
 import PublicCalendar from '../../../calendar/PublicCalendar';
@@ -30,9 +36,13 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
         adminMessage: '',
         // Reschedule fields
         rescheduleDate: '',
-        rescheduleTime: '',
-        rescheduleDuration: '',
-        showRescheduleFields: false
+        rescheduleSession: '',
+        showRescheduleFields: false,
+        // Payment fields
+        downpaymentAmount: '',
+        remainingAmount: '',
+        totalAmount: '',
+        paymentCompleted: false
     });
 
     const [loading, setLoading] = useState(false);
@@ -41,9 +51,18 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
     
     // Calendar states for reschedule
     const [showCalendar, setShowCalendar] = useState(false);
-    const [availableTimeSlots, setAvailableTimeSlots] = useState({});
+    const [availableSessions, setAvailableSessions] = useState({
+        morning: true,
+        afternoon: true
+    });
     const [checkingAvailability, setCheckingAvailability] = useState(false);
-    const [selectedTimeRange, setSelectedTimeRange] = useState({ start: '', end: '' });
+    const [selectedSessionInfo, setSelectedSessionInfo] = useState(null);
+
+    // Session options
+    const sessionOptions = [
+        { value: 'morning', label: 'Morning Session', time: '10:00 AM - 12:00 PM', icon: faSun },
+        { value: 'afternoon', label: 'Afternoon Session', time: '3:00 PM - 5:00 PM', icon: faCloudSun }
+    ];
 
     const resetForm = () => {
         setFormData({
@@ -52,12 +71,15 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
             sendEmail: true,
             adminMessage: '',
             rescheduleDate: '',
-            rescheduleTime: '',
-            rescheduleDuration: '',
-            showRescheduleFields: false
+            rescheduleSession: '',
+            showRescheduleFields: false,
+            downpaymentAmount: '',
+            remainingAmount: '',
+            totalAmount: '',
+            paymentCompleted: false
         });
         setShowCalendar(false);
-        setSelectedTimeRange({ start: '', end: '' });
+        setSelectedSessionInfo(null);
         setError('');
         setSuccess('');
         setLoading(false);
@@ -71,80 +93,59 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                 sendEmail: true,
                 adminMessage: '',
                 rescheduleDate: '',
-                rescheduleTime: '',
-                rescheduleDuration: appointment.durationHours || '',
-                showRescheduleFields: false
+                rescheduleSession: '',
+                showRescheduleFields: false,
+                downpaymentAmount: appointment.downpaymentAmount || '',
+                remainingAmount: appointment.remainingAmount || '',
+                totalAmount: appointment.totalAmount || '',
+                paymentCompleted: appointment.paymentCompleted || false
             });
         } else if (!isOpen) {
             resetForm();
         }
     }, [appointment, isOpen]);
 
-    // Fetch available time slots when reschedule date changes
+    // Fetch available sessions when reschedule date changes
     useEffect(() => {
         if (formData.showRescheduleFields && formData.rescheduleDate) {
-            fetchAvailableTimeSlots(formData.rescheduleDate);
+            fetchAvailableSessions(formData.rescheduleDate);
         } else {
-            setAvailableTimeSlots({});
+            setAvailableSessions({ morning: true, afternoon: true });
         }
     }, [formData.rescheduleDate, formData.showRescheduleFields]);
 
-    const fetchAvailableTimeSlots = async (date) => {
+    const fetchAvailableSessions = async (date) => {
         setCheckingAvailability(true);
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:5000/api/appointments/available-time-slots?date=${date}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await fetch(`http://localhost:5000/api/appointments/available-sessions?date=${date}`);
 
             if (response.ok) {
                 const result = await response.json();
                 if (result.success) {
-                    setAvailableTimeSlots(result.data || {});
+                    setAvailableSessions(result.data || { morning: true, afternoon: true });
                 }
             }
         } catch (error) {
-            console.error('Error fetching time slots:', error);
+            console.error('Error fetching sessions:', error);
         } finally {
             setCheckingAvailability(false);
         }
     };
 
-    // Check time slot availability with duration
-    const checkTimeSlotAvailability = async (date, time, duration) => {
+    // Check session availability
+    const checkSessionAvailability = async (date, sessionType) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/appointments/check-time-slot?date=${date}&time=${time}&durationHours=${duration}`);
+            const response = await fetch(`http://localhost:5000/api/appointments/check-session?date=${date}&session=${sessionType}`);
             if (response.ok) {
                 const result = await response.json();
                 return result;
             }
             return { isAvailable: true };
         } catch (error) {
-            console.error('Error checking time slot:', error);
+            console.error('Error checking session:', error);
             return { isAvailable: true };
         }
     };
-
-    // Calculate end time
-    const calculateEndTime = (startTime, durationHours) => {
-        if (!startTime || !durationHours) return '';
-        const [hours, minutes] = startTime.split(':');
-        const endHour = parseInt(hours) + parseInt(durationHours);
-        return `${endHour.toString().padStart(2, '0')}:${minutes}`;
-    };
-
-    // Update time range
-    useEffect(() => {
-        if (formData.rescheduleTime && formData.rescheduleDuration) {
-            const endTime = calculateEndTime(formData.rescheduleTime, formData.rescheduleDuration);
-            setSelectedTimeRange({
-                start: formData.rescheduleTime,
-                end: endTime
-            });
-        } else {
-            setSelectedTimeRange({ start: '', end: '' });
-        }
-    }, [formData.rescheduleTime, formData.rescheduleDuration]);
 
     const validateForm = () => {
         if (!formData.status) {
@@ -158,17 +159,117 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                 setError('Please select a new date for rescheduling');
                 return false;
             }
-            if (!formData.rescheduleTime) {
-                setError('Please select a new time for rescheduling');
-                return false;
-            }
-            if (!formData.rescheduleDuration) {
-                setError('Please select duration for rescheduled appointment');
+            if (!formData.rescheduleSession) {
+                setError('Please select a session (Morning or Afternoon)');
                 return false;
             }
         }
         
+        // Validate downpayment when confirming
+        if (formData.status === 'confirmed' && !formData.downpaymentAmount) {
+            setError('Please enter the downpayment amount before confirming');
+            return false;
+        }
+        
+        // Validate remaining amount when completing
+        if (formData.status === 'completed' && !formData.remainingAmount && !formData.paymentCompleted) {
+            setError('Please enter the remaining amount or mark payment as completed');
+            return false;
+        }
+        
         return true;
+    };
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        
+        // When downpayment amount changes, calculate total (downpayment is 20% of total)
+        if (name === 'downpaymentAmount') {
+            const downpayment = parseFloat(value) || 0;
+            const total = downpayment * 5; // Since downpayment is 20%, total = downpayment * 5
+            const remaining = total - downpayment;
+            
+            setFormData(prev => ({
+                ...prev,
+                downpaymentAmount: downpayment,
+                totalAmount: total,
+                remainingAmount: remaining,
+                [name]: type === 'checkbox' ? checked : value
+            }));
+        }
+        // When remaining amount changes (for completion)
+        else if (name === 'remainingAmount') {
+            const remaining = parseFloat(value) || 0;
+            const downpayment = parseFloat(formData.downpaymentAmount) || 0;
+            const total = downpayment + remaining;
+            
+            setFormData(prev => ({
+                ...prev,
+                remainingAmount: remaining,
+                totalAmount: total,
+                [name]: type === 'checkbox' ? checked : value
+            }));
+        }
+        else {
+            setFormData(prev => ({
+                ...prev,
+                [name]: type === 'checkbox' ? checked : value
+            }));
+        }
+        
+        // When status changes
+        if (name === 'status') {
+            setFormData(prev => ({
+                ...prev,
+                status: value,
+                showRescheduleFields: value === 'rescheduled',
+                rescheduleDate: '',
+                rescheduleSession: ''
+            }));
+            setSelectedSessionInfo(null);
+            setShowCalendar(false);
+        }
+        
+        if (error) {
+            setError('');
+        }
+    };
+
+    const handleDateSelect = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+        
+        setFormData(prev => ({ 
+            ...prev, 
+            rescheduleDate: dateString, 
+            rescheduleSession: '' 
+        }));
+        setShowCalendar(false);
+        setSelectedSessionInfo(null);
+        setError('');
+    };
+
+    const handleSessionSelect = async (sessionType) => {
+        if (!formData.rescheduleDate) {
+            setError('Please select a date first');
+            return;
+        }
+        
+        // Check availability
+        const availability = await checkSessionAvailability(formData.rescheduleDate, sessionType);
+        
+        if (!availability.isAvailable) {
+            setError(`This session is not available. Please choose another session or date.`);
+            setTimeout(() => setError(''), 3000);
+            return;
+        }
+        
+        const session = sessionOptions.find(s => s.value === sessionType);
+        setSelectedSessionInfo(session);
+        setFormData(prev => ({ ...prev, rescheduleSession: sessionType }));
+        if (error) setError('');
     };
 
     const handleSubmit = async (e) => {
@@ -185,27 +286,29 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                 status: formData.status,
                 notes: formData.notes,
                 sendEmail: formData.sendEmail,
-                adminMessage: formData.adminMessage
+                adminMessage: formData.adminMessage,
+                // Payment data
+                downpaymentAmount: formData.downpaymentAmount,
+                remainingAmount: formData.remainingAmount,
+                totalAmount: formData.totalAmount,
+                paymentCompleted: formData.paymentCompleted
             };
             
             // Add reschedule data if status is rescheduled
             if (formData.status === 'rescheduled' && formData.showRescheduleFields) {
-                // Check availability first
-                const availability = await checkTimeSlotAvailability(
+                const availability = await checkSessionAvailability(
                     formData.rescheduleDate, 
-                    formData.rescheduleTime, 
-                    formData.rescheduleDuration
+                    formData.rescheduleSession
                 );
                 
                 if (!availability.isAvailable) {
-                    setError(`The selected time slot is not available. ${availability.conflictingTime ? `Conflicts with booking from ${availability.conflictingTime}` : ''}`);
+                    setError(`The selected session is not available. Please choose another session or date.`);
                     setLoading(false);
                     return;
                 }
                 
                 appointmentData.rescheduleDate = formData.rescheduleDate;
-                appointmentData.rescheduleTime = formData.rescheduleTime;
-                appointmentData.rescheduleDuration = formData.rescheduleDuration;
+                appointmentData.rescheduleSession = formData.rescheduleSession;
             }
 
             await onSave(appointmentData);
@@ -227,66 +330,6 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
         }
     };
 
-    const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: type === 'checkbox' ? checked : value
-        }));
-        
-        // When status changes to rescheduled, show reschedule fields
-        if (name === 'status') {
-            setFormData(prev => ({
-                ...prev,
-                status: value,
-                showRescheduleFields: value === 'rescheduled',
-                rescheduleDate: '',
-                rescheduleTime: '',
-                rescheduleDuration: prev.rescheduleDuration
-            }));
-            setSelectedTimeRange({ start: '', end: '' });
-            setShowCalendar(false);
-        }
-        
-        if (error) {
-            setError('');
-        }
-    };
-
-    const handleDateSelect = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
-        
-        setFormData(prev => ({ 
-            ...prev, 
-            rescheduleDate: dateString, 
-            rescheduleTime: '' 
-        }));
-        setShowCalendar(false);
-        setSelectedTimeRange({ start: '', end: '' });
-        setError('');
-    };
-
-    const handleTimeSelect = async (time) => {
-        if (!formData.rescheduleDuration) {
-            setError('Please select duration first');
-            return;
-        }
-        
-        const availability = await checkTimeSlotAvailability(formData.rescheduleDate, time, formData.rescheduleDuration);
-        
-        if (!availability.isAvailable) {
-            setError(`This time slot is not available. ${availability.conflictingTime ? `Conflicts with booking from ${availability.conflictingTime}` : ''}`);
-            setTimeout(() => setError(''), 3000);
-            return;
-        }
-        
-        setFormData(prev => ({ ...prev, rescheduleTime: time }));
-        if (error) setError('');
-    };
-
     const getStatusColor = (status) => {
         const colors = {
             pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -301,11 +344,7 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
     const formatPackageType = (type) => {
         const typeMap = {
             'newborn': 'Newborn Session',
-            'maternity': 'Maternity Session',
-            'family': 'Family Session',
-            'milestone': 'Milestone Session',
-            'portrait': 'Portrait Session',
-            'custom': 'Custom Package'
+            'maternity': 'Maternity Session'
         };
         return typeMap[type?.toLowerCase()] || type || 'N/A';
     };
@@ -319,21 +358,32 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
         });
     };
 
-    // Generate time slots
-    const generateTimeSlots = () => {
-        const slots = [];
-        for (let hour = 9; hour <= 20; hour++) {
-            for (let minute = 0; minute < 60; minute += 30) {
-                const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                if (timeString >= '09:00' && timeString <= '20:00') {
-                    slots.push(timeString);
-                }
-            }
-        }
-        return slots;
+    const formatPaymentMethod = (method) => {
+        const methods = {
+            'bank': 'Bank Transfer',
+            'gcash': 'GCash',
+            'none': 'Not Specified'
+        };
+        return methods[method] || method || 'Not Specified';
     };
 
-    const timeSlots = generateTimeSlots();
+    const getSessionDisplay = (sessionType) => {
+        if (sessionType === 'morning') {
+            return 'Morning Session (10AM-12PM)';
+        } else if (sessionType === 'afternoon') {
+            return 'Afternoon Session (3PM-5PM)';
+        }
+        return 'Not Specified';
+    };
+
+    const formatCurrency = (amount) => {
+        if (!amount) return '₱0';
+        return new Intl.NumberFormat('en-PH', {
+            style: 'currency',
+            currency: 'PHP',
+            minimumFractionDigits: 0
+        }).format(amount);
+    };
 
     return (
         <FormModal 
@@ -383,12 +433,41 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                         </div>
                         <div className='flex items-center gap-2'>
                             <FontAwesomeIcon icon={faClock} className='text-gray-400 text-xs' />
-                            <span className='text-gray-600'>{appointment.preferredTime} ({appointment.durationHours}h)</span>
+                            <span className='text-gray-600'>{getSessionDisplay(appointment.sessionType)}</span>
                         </div>
                         <div className='flex items-center gap-2 col-span-2'>
                             <FontAwesomeIcon icon={faMapMarkerAlt} className='text-gray-400 text-xs' />
                             <span className='text-gray-600'>{appointment.location}</span>
                         </div>
+                    </div>
+
+                    {/* Payment Info Summary */}
+                    <div className='mt-3 pt-3 border-t border-gray-200'>
+                        <div className='flex items-center justify-between text-xs'>
+                            <div className='flex items-center gap-2'>
+                                <FontAwesomeIcon icon={faMoneyBillWave} className='text-gray-400' />
+                                <span className='text-gray-500'>Payment Method:</span>
+                                <span className='font-medium text-gray-700'>{formatPaymentMethod(appointment.paymentMethod)}</span>
+                            </div>
+                            {appointment.receiptUrl && (
+                                <div className='flex items-center gap-1'>
+                                    <FontAwesomeIcon icon={faImage} className='text-blue-500' />
+                                    <span className='text-blue-500'>Receipt Uploaded</span>
+                                </div>
+                            )}
+                        </div>
+                        {appointment.downpaymentAmount && (
+                            <div className='mt-2 text-xs'>
+                                <span className='text-gray-500'>Downpayment Paid:</span>
+                                <span className='font-medium text-green-600 ml-2'>{formatCurrency(appointment.downpaymentAmount)}</span>
+                            </div>
+                        )}
+                        {appointment.totalAmount && (
+                            <div className='mt-1 text-xs'>
+                                <span className='text-gray-500'>Total Package:</span>
+                                <span className='font-medium text-gray-700 ml-2'>{formatCurrency(appointment.totalAmount)}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -408,7 +487,7 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                 {appointment?.preferredDate && appointment?.status !== 'rescheduled' && (
                     <div className="mt-2 text-xs text-gray-500">
                         <FontAwesomeIcon icon={faCalendarWeek} className="mr-1" />
-                        Current: {formatDate(appointment.preferredDate)} at {appointment.preferredTime}
+                        Current: {formatDate(appointment.preferredDate)} - {getSessionDisplay(appointment.sessionType)}
                     </div>
                 )}
             </div>
@@ -434,6 +513,141 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                     <option value="rescheduled">🔄 Rescheduled</option>
                 </select>
             </div>
+
+            {/* DOWNPAYMENT SECTION - Only show when status is being changed to confirmed */}
+            {formData.status === 'confirmed' && (
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                    <div className="flex items-center gap-2 mb-3">
+                        <FontAwesomeIcon icon={faMoneyBillWave} className="text-blue-600" />
+                        <h4 className="font-medium text-blue-800">Downpayment Information</h4>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Downpayment Amount (20%) - Already Paid Online (₱) *
+                            </label>
+                            <input
+                                type="number"
+                                name="downpaymentAmount"
+                                value={formData.downpaymentAmount || ''}
+                                onChange={handleChange}
+                                placeholder="e.g., 1000"
+                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                            />
+                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                <FontAwesomeIcon icon={faCheckCircle} className="text-xs" />
+                                Client already paid this amount online (receipt uploaded)
+                            </p>
+                        </div>
+                        
+                        {formData.downpaymentAmount > 0 && (
+                            <div className="mt-2 p-2 bg-green-50 rounded-lg">
+                                <p className="text-xs text-green-700 flex items-center gap-1">
+                                    <FontAwesomeIcon icon={faInfoCircle} className="text-xs" />
+                                    Total package will be calculated as: {formatCurrency(formData.downpaymentAmount)} × 5 = {formatCurrency(formData.downpaymentAmount * 5)}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Remaining balance (80%): {formatCurrency((formData.downpaymentAmount * 5) - formData.downpaymentAmount)}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* REMAINING PAYMENT SECTION - Only show when status is being changed to completed */}
+            {formData.status === 'completed' && (
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                    <div className="flex items-center gap-2 mb-3">
+                        <FontAwesomeIcon icon={faMoneyBillWave} className="text-green-600" />
+                        <h4 className="font-medium text-green-800">Final Payment Information</h4>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {/* Show existing downpayment info */}
+                        {formData.downpaymentAmount > 0 && (
+                            <div className="p-2 bg-blue-50 rounded-lg">
+                                <p className="text-xs text-blue-700">
+                                    <span className="font-medium">Downpayment already paid:</span> {formatCurrency(formData.downpaymentAmount)}
+                                </p>
+                                <p className="text-xs text-blue-700 mt-1">
+                                    <span className="font-medium">Total package price:</span> {formatCurrency(formData.totalAmount || formData.downpaymentAmount * 5)}
+                                </p>
+                            </div>
+                        )}
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Remaining Balance (80%) - Paid in Person (₱)
+                            </label>
+                            <input
+                                type="number"
+                                name="remainingAmount"
+                                value={formData.remainingAmount || ''}
+                                onChange={handleChange}
+                                placeholder="e.g., 4000"
+                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+                            />
+                            <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+                                <FontAwesomeIcon icon={faClock} className="text-xs" />
+                                Client paid this amount in person after the session
+                            </p>
+                        </div>
+                        
+                        {/* Payment Completion Checkbox */}
+                        <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="paymentCompleted"
+                                    checked={formData.paymentCompleted}
+                                    onChange={handleChange}
+                                    className="w-5 h-5 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                                />
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <FontAwesomeIcon icon={faCheckCircle} className="text-green-600" />
+                                        <span className="font-medium text-gray-900">Mark Payment as Fully Completed</span>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                        Check this box when the client has paid the remaining balance in full
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Payment Summary Preview - Shows when both downpayment and remaining are entered */}
+            {formData.downpaymentAmount > 0 && formData.remainingAmount > 0 && (
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-xs font-medium text-gray-700 mb-2">Payment Summary:</p>
+                    <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Downpayment (20%):</span>
+                            <span className="font-medium text-green-600">{formatCurrency(formData.downpaymentAmount)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Remaining Balance (80%):</span>
+                            <span className="font-medium text-orange-600">{formatCurrency(formData.remainingAmount)}</span>
+                        </div>
+                        <div className="border-t border-gray-200 mt-2 pt-2">
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Total Package:</span>
+                                <span className="font-medium text-gray-800">{formatCurrency(formData.totalAmount)}</span>
+                            </div>
+                        </div>
+                        {formData.paymentCompleted && (
+                            <div className="flex justify-between mt-1">
+                                <span className="text-gray-500">Payment Status:</span>
+                                <span className="font-medium text-green-600">Fully Paid ✓</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Reschedule Fields - Only show when status is rescheduled */}
             {formData.showRescheduleFields && (
@@ -479,73 +693,62 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                         </div>
                     )}
 
-                    {/* Duration */}
+                    {/* Session Selection */}
                     <div>
                         <label className='block text-sm font-medium text-gray-700 mb-2'>
-                            Duration (Hours) *
+                            Select Session *
                         </label>
-                        <select 
-                            name='rescheduleDuration' 
-                            value={formData.rescheduleDuration} 
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400/20 focus:border-purple-400 transition-all bg-white"
-                        >
-                            <option value=''>Select duration</option>
-                            <option value='1'>1 hour</option>
-                            <option value='2'>2 hours</option>
-                            <option value='3'>3 hours</option>
-                            <option value='4'>4 hours</option>
-                            <option value='5'>5 hours</option>
-                            <option value='6'>6 hours</option>
-                            <option value='7'>7 hours</option>
-                            <option value='8'>8 hours</option>
-                        </select>
-                    </div>
-
-                    {/* Time Selection */}
-                    <div>
-                        <label className='block text-sm font-medium text-gray-700 mb-2'>
-                            New Time *
-                        </label>
-                        <div className='relative'>
-                            <FontAwesomeIcon icon={faClock} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                            <select 
-                                value={formData.rescheduleTime} 
-                                onChange={(e) => handleTimeSelect(e.target.value)}
-                                disabled={!formData.rescheduleDate || !formData.rescheduleDuration || checkingAvailability}
-                                className="w-full pl-10 p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400/20 focus:border-purple-400 transition-all bg-white"
-                            >
-                                <option value=''>Select a time</option>
-                                {timeSlots.map(time => {
-                                    const isAvailable = availableTimeSlots[time] !== false;
-                                    return (
-                                        <option 
-                                            key={time} 
-                                            value={time}
-                                            disabled={!isAvailable}
-                                        >
-                                            {time} {!isAvailable && '(Booked)'}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                            {checkingAvailability && (
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                    <FontAwesomeIcon icon={faSpinner} className="animate-spin text-gray-400" />
-                                </div>
-                            )}
+                        <div className="grid grid-cols-2 gap-3">
+                            {sessionOptions.map((session) => {
+                                const isAvailable = !formData.rescheduleDate || availableSessions[session.value] !== false;
+                                return (
+                                    <button
+                                        key={session.value}
+                                        type="button"
+                                        onClick={() => handleSessionSelect(session.value)}
+                                        disabled={!formData.rescheduleDate || !isAvailable}
+                                        className={`
+                                            p-3 rounded-lg border-2 transition-all duration-200 text-left
+                                            ${formData.rescheduleSession === session.value 
+                                                ? 'border-purple-600 bg-purple-50' 
+                                                : 'border-gray-200 hover:border-purple-400'}
+                                            ${(!formData.rescheduleDate || !isAvailable) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                        `}
+                                    >
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <FontAwesomeIcon 
+                                                icon={session.icon} 
+                                                className={formData.rescheduleSession === session.value ? 'text-purple-600' : 'text-gray-400'} 
+                                            />
+                                            <span className={`text-sm font-medium ${formData.rescheduleSession === session.value ? 'text-purple-800' : 'text-gray-600'}`}>
+                                                {session.label}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-500">{session.time}</p>
+                                        {!isAvailable && formData.rescheduleDate && (
+                                            <p className="text-xs text-red-500 mt-1">Fully Booked</p>
+                                        )}
+                                    </button>
+                                );
+                            })}
                         </div>
-                        {(!formData.rescheduleDate || !formData.rescheduleDuration) && (
-                            <p className="text-xs text-gray-400 mt-1">Please select a date and duration first</p>
+                        {checkingAvailability && (
+                            <div className="flex items-center justify-center mt-2">
+                                <FontAwesomeIcon icon={faSpinner} className="animate-spin text-gray-400" />
+                                <span className="text-xs text-gray-400 ml-2">Checking availability...</span>
+                            </div>
+                        )}
+                        {!formData.rescheduleDate && (
+                            <p className="text-xs text-gray-400 mt-1">Please select a date first</p>
                         )}
                     </div>
 
-                    {/* Time Range Display */}
-                    {selectedTimeRange.start && selectedTimeRange.end && (
+                    {/* Selected Session Display */}
+                    {selectedSessionInfo && formData.rescheduleSession && (
                         <div className="mt-2 p-3 bg-purple-100 rounded-lg border border-purple-200">
                             <p className="text-xs text-purple-700 flex items-center gap-1">
-                                <FontAwesomeIcon icon={faClock} className="text-xs" />
-                                Rescheduled session will be from <strong>{selectedTimeRange.start}</strong> to <strong>{selectedTimeRange.end}</strong>
+                                <FontAwesomeIcon icon={selectedSessionInfo.icon} className="text-xs" />
+                                Rescheduled session: <strong>{selectedSessionInfo.label}</strong> ({selectedSessionInfo.time})
                             </p>
                         </div>
                     )}
@@ -632,9 +835,20 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                                         📧 Email will be sent to: <strong>{appointment?.email}</strong>
                                     </span>
                                 )}
-                                {formData.status === 'rescheduled' && formData.rescheduleDate && (
+                                {formData.status === 'rescheduled' && formData.rescheduleDate && formData.rescheduleSession && (
                                     <span className="block mt-2">
-                                        📅 New date: <strong>{new Date(formData.rescheduleDate).toLocaleDateString()}</strong> at <strong>{formData.rescheduleTime}</strong>
+                                        📅 New date: <strong>{new Date(formData.rescheduleDate).toLocaleDateString()}</strong> - <strong>{getSessionDisplay(formData.rescheduleSession)}</strong>
+                                    </span>
+                                )}
+                                {formData.status === 'confirmed' && formData.downpaymentAmount > 0 && (
+                                    <span className="block mt-2">
+                                        💰 Downpayment received: <strong>{formatCurrency(formData.downpaymentAmount)}</strong>
+                                    </span>
+                                )}
+                                {formData.status === 'completed' && formData.remainingAmount > 0 && (
+                                    <span className="block mt-2">
+                                        💰 Final payment received: <strong>{formatCurrency(formData.remainingAmount)}</strong>
+                                        {formData.paymentCompleted && <span> - Payment Fully Completed ✓</span>}
                                     </span>
                                 )}
                             </p>

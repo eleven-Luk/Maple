@@ -1,88 +1,14 @@
-// controllers/Maple/ScheduleController.js
 import Appointment from "../../models/Maple/Appointment.js";
 import UnavailableDate from "../../models/Maple/UnavailableDate.js";
 
-// Helper function to format end time
-const formatEndTime = (startTime, durationHours) => {
-    const [hours, minutes] = startTime.split(':');
-    const endHour = parseInt(hours) + parseInt(durationHours);
-    return `${endHour.toString().padStart(2, '0')}:${minutes}`;
+// Session time mappings
+const SESSION_TIMES = {
+    morning: { start: '10:00 AM', end: '12:00 PM', label: 'Morning Session (10AM-12PM)' },
+    afternoon: { start: '3:00 PM', end: '5:00 PM', label: 'Afternoon Session (3PM-5PM)' }
 };
 
-// ==================== AVAILABILITY CHECKS ====================
-export const checkTimeSlotAvailability = async (req, res) => {
-    try {
-        const { date, time, durationHours } = req.query;
-        
-        if (!date || !time || !durationHours) {
-            return res.status(400).json({
-                success: false,
-                message: 'Date, time, and duration are required'
-            });
-        }
-        
-        const selectedDate = new Date(date);
-        selectedDate.setHours(0, 0, 0, 0);
-        
-        const [hours, minutes] = time.split(':');
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(parseInt(hours), parseInt(minutes), 0);
-        
-        const selectedEnd = new Date(selectedStart);
-        selectedEnd.setHours(selectedStart.getHours() + parseInt(durationHours));
-        
-        const dayStart = new Date(selectedDate);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(selectedDate);
-        dayEnd.setHours(23, 59, 59, 999);
-        
-        // Get ALL confirmed and rescheduled appointments
-        const existingAppointments = await Appointment.find({
-            preferredDate: { $gte: dayStart, $lte: dayEnd },
-            status: { $in: ['confirmed', 'rescheduled'] }
-        });
-        
-        let hasConflict = false;
-        let conflictingAppointment = null;
-        
-        for (const app of existingAppointments) {
-            const [appHours, appMinutes] = app.preferredTime.split(':');
-            const appStart = new Date(selectedDate);
-            appStart.setHours(parseInt(appHours), parseInt(appMinutes), 0);
-            
-            const appEnd = new Date(appStart);
-            appEnd.setHours(appStart.getHours() + app.durationHours);
-            
-            console.log(`Checking against booking: ${app.preferredTime} to ${formatEndTime(app.preferredTime, app.durationHours)}`);
-            console.log(`Requested: ${time} to ${formatEndTime(time, parseInt(durationHours))}`);
-            console.log(`Overlap? ${selectedStart < appEnd && selectedEnd > appStart}`);
-            
-            // Check if the requested time slot overlaps with existing booking
-            if ((selectedStart < appEnd && selectedEnd > appStart)) {
-                hasConflict = true;
-                conflictingAppointment = app;
-                break;
-            }
-        }
-        
-        res.status(200).json({
-            success: true,
-            isAvailable: !hasConflict,
-            conflictingTime: hasConflict ? `${conflictingAppointment.preferredTime} - ${formatEndTime(conflictingAppointment.preferredTime, conflictingAppointment.durationHours)}` : null,
-            message: hasConflict ? 'This time slot is already booked' : 'Time slot available'
-        });
-        
-    } catch (error) {
-        console.error('Check Time Slot Availability Error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
-    }
-};
-
-
-export const getAvailableTimeSlotsWithDuration = async (req, res) => {
+// ==================== SESSION AVAILABILITY ====================
+export const getAvailableSessions = async (req, res) => {
     try {
         const { date } = req.query;
         
@@ -101,79 +27,261 @@ export const getAvailableTimeSlotsWithDuration = async (req, res) => {
         const dayEnd = new Date(selectedDate);
         dayEnd.setHours(23, 59, 59, 999);
         
-        // Get ALL confirmed and rescheduled appointments for this date
+        // Check if date is unavailable
+        const unavailableDate = await UnavailableDate.findOne({
+            date: { $gte: dayStart, $lte: dayEnd }
+        });
+        
+        if (unavailableDate) {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    morning: false,
+                    afternoon: false
+                },
+                isDateUnavailable: true,
+                reason: unavailableDate.reason
+            });
+        }
+        
+        // Get all appointments for this date
         const existingAppointments = await Appointment.find({
             preferredDate: { $gte: dayStart, $lte: dayEnd },
-            status: { $in: ['confirmed', 'rescheduled'] }
+            status: { $in: ['pending', 'confirmed', 'rescheduled'] }
         });
         
-        console.log(`📅 Checking availability for ${date}`);
-        console.log(`Found ${existingAppointments.length} existing bookings:`);
-        existingAppointments.forEach(app => {
-            const endTime = formatEndTime(app.preferredTime, app.durationHours);
-            console.log(`   - ${app.preferredTime} to ${endTime} (${app.durationHours}h) - ${app.name}`);
-        });
+        // Check availability for each session
+        const availability = {
+            morning: true,
+            afternoon: true
+        };
         
-        // Define all possible time slots (30-minute intervals from 9 AM to 8 PM)
-        const allTimeSlots = [];
-        for (let hour = 9; hour <= 20; hour++) {
-            for (let minute = 0; minute < 60; minute += 30) {
-                const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                if (timeString >= '09:00' && timeString <= '20:00') {
-                    allTimeSlots.push(timeString);
-                }
+        for (const appointment of existingAppointments) {
+            if (appointment.sessionType === 'morning') {
+                availability.morning = false;
+            } else if (appointment.sessionType === 'afternoon') {
+                availability.afternoon = false;
             }
         }
         
-        const availableSlots = {};
-        
-        // For each time slot, check if it's available
-        for (const slot of allTimeSlots) {
-            const [hours, minutes] = slot.split(':');
-            const slotStart = new Date(selectedDate);
-            slotStart.setHours(parseInt(hours), parseInt(minutes), 0);
-            
-            // Calculate slot end (30 minutes later for 30-min slots)
-            const slotEnd = new Date(slotStart);
-            slotEnd.setMinutes(slotEnd.getMinutes() + 30);
-            
-            let isAvailable = true;
-            let conflictingAppointment = null;
-            
-            // Check against all existing appointments
-            for (const app of existingAppointments) {
-                const [appHours, appMinutes] = app.preferredTime.split(':');
-                const appStart = new Date(selectedDate);
-                appStart.setHours(parseInt(appHours), parseInt(appMinutes), 0);
-                
-                const appEnd = new Date(appStart);
-                appEnd.setHours(appStart.getHours() + app.durationHours);
-                
-                // Check if this time slot overlaps with the existing booking
-                // Overlap occurs if: slotStart < appEnd AND slotEnd > appStart
-                if (slotStart < appEnd && slotEnd > appStart) {
-                    isAvailable = false;
-                    conflictingAppointment = app;
-                    break;
-                }
-            }
-            
-            availableSlots[slot] = isAvailable;
-            if (!isAvailable) {
-                console.log(`   ❌ ${slot} is BOOKED`);
-            }
-        }
-        
-        // Count available vs booked
-        const bookedCount = Object.values(availableSlots).filter(v => v === false).length;
-        const availableCount = Object.values(availableSlots).filter(v => v === true).length;
-        console.log(`📊 Results: ${availableCount} available, ${bookedCount} booked`);
+        console.log(`📅 Session availability for ${date}:`, availability);
         
         res.status(200).json({
             success: true,
-            data: availableSlots,
-            allTimeSlots,
-            message: 'Available time slots retrieved successfully'
+            data: availability,
+            sessionTimes: SESSION_TIMES,
+            isDateUnavailable: false,
+            message: 'Session availability retrieved successfully'
+        });
+        
+    } catch (error) {
+        console.error('Get available sessions error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get available sessions',
+            error: error.message
+        });
+    }
+};
+
+export const checkSessionAvailability = async (req, res) => {
+    try {
+        const { date, session } = req.query;
+        
+        if (!date || !session) {
+            return res.status(400).json({
+                success: false,
+                message: 'Date and session are required'
+            });
+        }
+        
+        if (!['morning', 'afternoon'].includes(session)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid session type. Must be "morning" or "afternoon"'
+            });
+        }
+        
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        const dayStart = new Date(selectedDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(selectedDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        // Check if date is unavailable
+        const unavailableDate = await UnavailableDate.findOne({
+            date: { $gte: dayStart, $lte: dayEnd }
+        });
+        
+        if (unavailableDate) {
+            return res.status(200).json({
+                success: true,
+                isAvailable: false,
+                message: 'This date is unavailable',
+                reason: unavailableDate.reason
+            });
+        }
+        
+        // Check if session is already booked
+        const existingAppointment = await Appointment.findOne({
+            preferredDate: { $gte: dayStart, $lte: dayEnd },
+            sessionType: session,
+            status: { $in: ['pending', 'confirmed', 'rescheduled'] }
+        });
+        
+        const isAvailable = !existingAppointment;
+        
+        res.status(200).json({
+            success: true,
+            isAvailable: isAvailable,
+            session: session,
+            sessionTime: SESSION_TIMES[session],
+            message: isAvailable ? 'Session is available' : 'Session is already booked'
+        });
+        
+    } catch (error) {
+        console.error('Check session availability error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to check session availability',
+            error: error.message
+        });
+    }
+};
+
+// ==================== RESCHEDULING ====================
+export const rescheduleAppointment = async (req, res) => {
+    try {
+        const { appointmentId } = req.params;
+        const { newDate, sessionType, reason } = req.body;
+        
+        if (!newDate || !sessionType) {
+            return res.status(400).json({
+                success: false,
+                message: 'New date and session type are required'
+            });
+        }
+        
+        if (!['morning', 'afternoon'].includes(sessionType)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid session type'
+            });
+        }
+        
+        const selectedDate = new Date(newDate);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        const dayStart = new Date(selectedDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(selectedDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        // Check if session is already booked
+        const existingAppointment = await Appointment.findOne({
+            preferredDate: { $gte: dayStart, $lte: dayEnd },
+            sessionType: sessionType,
+            status: { $in: ['pending', 'confirmed', 'rescheduled'] },
+            _id: { $ne: appointmentId }
+        });
+        
+        if (existingAppointment) {
+            return res.status(400).json({
+                success: false,
+                message: 'The requested session is not available'
+            });
+        }
+        
+        const sessionTime = SESSION_TIMES[sessionType];
+        
+        const updatedAppointment = await Appointment.findByIdAndUpdate(
+            appointmentId,
+            {
+                preferredDate: new Date(newDate),
+                sessionType: sessionType,
+                status: 'rescheduled',
+                notes: reason ? `Rescheduled: ${reason}` : 'Appointment rescheduled'
+            },
+            { new: true }
+        );
+        
+        if (!updatedAppointment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found'
+            });
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: 'Appointment rescheduled successfully',
+            data: updatedAppointment
+        });
+        
+    } catch (error) {
+        console.error('Reschedule Appointment Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
+
+// ==================== LEGACY FUNCTIONS (For backward compatibility) ====================
+export const checkTimeSlotAvailability = async (req, res) => {
+    try {
+        const { date, session } = req.query;
+        
+        if (session && ['morning', 'afternoon'].includes(session)) {
+            const result = await checkSessionAvailabilityLogic(date, session);
+            return res.status(200).json({
+                success: true,
+                isAvailable: result.isAvailable,
+                message: result.message
+            });
+        }
+        
+        const result = await getAvailableSessionsLogic(date);
+        return res.status(200).json({
+            success: true,
+            availableSessions: result,
+            sessionTimes: SESSION_TIMES,
+            message: 'Session availability retrieved'
+        });
+        
+    } catch (error) {
+        console.error('Check Time Slot Availability Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+export const getAvailableTimeSlotsWithDuration = async (req, res) => {
+    try {
+        const { date } = req.query;
+        
+        if (!date) {
+            return res.status(400).json({
+                success: false,
+                message: 'Date is required'
+            });
+        }
+        
+        const availability = await getAvailableSessionsLogic(date);
+        
+        res.status(200).json({
+            success: true,
+            data: {
+                morning: availability.morning,
+                afternoon: availability.afternoon
+            },
+            sessionTimes: SESSION_TIMES,
+            message: 'Session availability retrieved successfully'
         });
         
     } catch (error) {
@@ -186,15 +294,14 @@ export const getAvailableTimeSlotsWithDuration = async (req, res) => {
     }
 };
 
-
 export const checkAvailability = async (req, res) => {
     try {
-        const { date, time } = req.body;
+        const { date, sessionType } = req.body;
 
-        if (!date || !time) {
+        if (!date || !sessionType) {
             return res.status(400).json({
                 success: false,
-                message: 'Date and time are required'
+                message: 'Date and session type are required'
             });
         }
 
@@ -203,11 +310,10 @@ export const checkAvailability = async (req, res) => {
         const endDate = new Date(date);
         endDate.setHours(23, 59, 59, 999);
 
-        // ✅ Include both 'confirmed' AND 'rescheduled' appointments
         const existingAppointment = await Appointment.findOne({
             preferredDate: { $gte: startDate, $lte: endDate },
-            preferredTime: time,
-            status: { $in: ['confirmed', 'rescheduled'] }
+            sessionType: sessionType,
+            status: { $in: ['pending', 'confirmed', 'rescheduled'] }
         }); 
 
         const unavailableDate = await UnavailableDate.findOne({
@@ -219,7 +325,8 @@ export const checkAvailability = async (req, res) => {
         res.status(200).json({
             success: true,
             isAvailable,
-            message: isAvailable ? 'Date is available' : 'Date is not available'
+            sessionTime: SESSION_TIMES[sessionType],
+            message: isAvailable ? 'Session is available' : 'Session is not available'
         });
 
     } catch (error) {
@@ -248,125 +355,32 @@ export const getAvailableTimeSlots = async (req, res) => {
         const endDate = new Date(date);
         endDate.setHours(23, 59, 59, 999);
 
-        // ✅ Include both 'confirmed' AND 'rescheduled' appointments
         const bookedAppointments = await Appointment.find({
             preferredDate: { $gte: startDate, $lte: endDate },
-            status: { $in: ['confirmed', 'rescheduled'] }
-        }).select('preferredTime');
+            status: { $in: ['pending', 'confirmed', 'rescheduled'] }
+        }).select('sessionType');
 
-        const bookedTimes = bookedAppointments.map(app => app.preferredTime);
+        const bookedSessions = bookedAppointments.map(app => app.sessionType);
 
         const unavailableDate = await UnavailableDate.findOne({
             date: {$gte: startDate, $lte: endDate}
         }); 
 
-        const allTimeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
-
-        const availableSlots = {};
-        allTimeSlots.forEach(slot => {
-            availableSlots[slot] = !bookedTimes.includes(slot) && !unavailableDate;
-        });
+        const availableSessions = {
+            morning: !bookedSessions.includes('morning') && !unavailableDate,
+            afternoon: !bookedSessions.includes('afternoon') && !unavailableDate
+        };
 
         res.status(200).json({
             success: true,
-            availableSlots,
+            availableSessions,
+            sessionTimes: SESSION_TIMES,
             isDateUnavailable: !!unavailableDate,
-            unavailableReason: unavailableDate?.reason || 'Not Available'
+            unavailableReason: unavailableDate?.reason || null
         });
 
     } catch (error) {
         console.error('Get Available Time Slots Error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error',
-            error: error.message
-        });
-    }
-};
-
-// ==================== RESCHEDULING ====================
-export const rescheduleAppointment = async (req, res) => {
-    try {
-        const { appointmentId } = req.params;
-        const { newDate, newTime, durationHours, reason } = req.body;
-        
-        if (!newDate || !newTime || !durationHours) {
-            return res.status(400).json({
-                success: false,
-                message: 'New date, time, and duration are required'
-            });
-        }
-        
-        const selectedDate = new Date(newDate);
-        selectedDate.setHours(0, 0, 0, 0);
-        
-        const [hours, minutes] = newTime.split(':');
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(parseInt(hours), parseInt(minutes), 0);
-        
-        const selectedEnd = new Date(selectedStart);
-        selectedEnd.setHours(selectedStart.getHours() + parseInt(durationHours));
-        
-        const dayStart = new Date(selectedDate);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(selectedDate);
-        dayEnd.setHours(23, 59, 59, 999);
-        
-        const existingAppointments = await Appointment.find({
-            preferredDate: { $gte: dayStart, $lte: dayEnd },
-            status: 'confirmed',
-            _id: { $ne: appointmentId }
-        });
-        
-        let hasConflict = false;
-        for (const app of existingAppointments) {
-            const [appHours, appMinutes] = app.preferredTime.split(':');
-            const appStart = new Date(selectedDate);
-            appStart.setHours(parseInt(appHours), parseInt(appMinutes), 0);
-            
-            const appEnd = new Date(appStart);
-            appEnd.setHours(appStart.getHours() + app.durationHours);
-            
-            if ((selectedStart < appEnd && selectedEnd > appStart)) {
-                hasConflict = true;
-                break;
-            }
-        }
-        
-        if (hasConflict) {
-            return res.status(400).json({
-                success: false,
-                message: 'The requested time slot is not available'
-            });
-        }
-        
-        const updatedAppointment = await Appointment.findByIdAndUpdate(
-            appointmentId,
-            {
-                preferredDate: new Date(newDate),
-                preferredTime: newTime,
-                durationHours: parseInt(durationHours),
-                status: 'rescheduled',
-                notes: reason ? `Rescheduled: ${reason}` : 'Appointment rescheduled'
-            },
-            { new: true }
-        );
-        
-        if (!updatedAppointment) {
-            return res.status(404).json({
-                success: false,
-                message: 'Appointment not found'
-            });
-        }
-        
-        res.status(200).json({
-            success: true,
-            message: 'Appointment rescheduled successfully',
-            data: updatedAppointment
-        });
-        
-    } catch (error) {
-        console.error('Reschedule Appointment Error:', error);
         res.status(500).json({
             success: false,
             message: 'Internal server error',
@@ -468,4 +482,43 @@ export const deleteUnavailableDate = async (req, res) => {
             error: error.message
         });
     }
+};
+
+// ==================== HELPER FUNCTIONS ====================
+const checkSessionAvailabilityLogic = async (date, session) => {
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    const dayStart = new Date(selectedDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(selectedDate);
+    dayEnd.setHours(23, 59, 59, 999);
+    
+    const existingAppointment = await Appointment.findOne({
+        preferredDate: { $gte: dayStart, $lte: dayEnd },
+        sessionType: session,
+        status: { $in: ['pending', 'confirmed', 'rescheduled'] }
+    });
+    
+    return { isAvailable: !existingAppointment };
+};
+
+const getAvailableSessionsLogic = async (date) => {
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    const dayStart = new Date(selectedDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(selectedDate);
+    dayEnd.setHours(23, 59, 59, 999);
+    
+    const existingAppointments = await Appointment.find({
+        preferredDate: { $gte: dayStart, $lte: dayEnd },
+        status: { $in: ['pending', 'confirmed', 'rescheduled'] }
+    });
+    
+    return {
+        morning: !existingAppointments.some(a => a.sessionType === 'morning'),
+        afternoon: !existingAppointments.some(a => a.sessionType === 'afternoon')
+    };
 };

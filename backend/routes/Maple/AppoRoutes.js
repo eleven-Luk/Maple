@@ -11,7 +11,8 @@ import {
     getUpcomingAppointments,
     getAppointmentStats,
     updateAppointment,
-    bulkDeleteAppointments
+    bulkDeleteAppointments,
+    uploadReceipt
 } from '../../controllers/Maple/AppointmentController.js';
 
 import {
@@ -22,7 +23,9 @@ import {
     rescheduleAppointment,
     getUnavailableDates,
     setUnavailableDate,
-    deleteUnavailableDate
+    deleteUnavailableDate,
+    getAvailableSessions,
+    checkSessionAvailability
 } from '../../controllers/Maple/ScheduleController.js';
 
 const router = express.Router();
@@ -30,13 +33,20 @@ const router = express.Router();
 // ==================== PUBLIC ROUTES ====================
 router.post('/create', createAppointment);
 
-// Availability check routes (public)
+// Session-based availability routes
+router.get('/available-sessions', getAvailableSessions);
+router.get('/check-session', checkSessionAvailability);
+
+// Legacy availability check routes (keep for backward compatibility)
 router.get('/check-time-slot', checkTimeSlotAvailability);
 router.get('/available-time-slots', getAvailableTimeSlotsWithDuration);
 router.post('/check-availability', checkAvailability);
 router.post('/available-slots', getAvailableTimeSlots);
 
-// ✅ PUBLIC endpoint for unavailable dates (used by PublicCalendar)
+// Receipt upload route
+router.post('/upload-receipt', uploadReceipt);
+
+// Public endpoints for unavailable dates (used by PublicCalendar)
 router.get('/public/unavailable-dates', getUnavailableDates);  
 router.get('/public/confirmed', getConfirmedAppointments); 
 
@@ -49,12 +59,12 @@ router.get('/upcoming', protect, getUpcomingAppointments);
 router.get('/stats', protect, getAppointmentStats);
 router.get('/view/:appointmentId', protect, getViewAppointment);
 
-// Update routes - IMPORTANT: Use :appointmentId to match controller
+// Update routes
 router.put('/update/:appointmentId', protect, updateAppointment);
 router.put('/confirm/:appointmentId', protect, confirmAppointment);
 router.put('/reschedule/:appointmentId', protect, rescheduleAppointment);
 
-// Delete route
+// Delete routes
 router.delete('/delete/:appointmentId', protect, deleteAppointment);
 router.delete('/bulk-delete', protect, bulkDeleteAppointments);
 

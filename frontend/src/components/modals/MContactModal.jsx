@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faEnvelope,
@@ -13,10 +13,23 @@ import {
     faBox,
     faBan,
     faSpinner,
-    faShieldAlt
+    faShieldAlt,
+    faSun,
+    faCloudSun,
+    faMoneyBillWave,
+    faQrcode,
+    faUpload,
+    faFileImage,
+    faTimes,
+    faCheckCircle,
+    faM
 } from '@fortawesome/free-solid-svg-icons';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import PublicCalendar from '../../components/calendar/PublicCalendar';
+
+// QR code image
+import gcash from '../../assets/qr-gcash.jpg';
+import bank from '../../assets/qrbank.jpg';
 
 function MContactModal({ isOpen, onClose, appointment }) {
     const [formData, setFormData] = useState({
@@ -25,11 +38,12 @@ function MContactModal({ isOpen, onClose, appointment }) {
         phone: '',
         packageType: 'newborn',
         preferredDate: '',
-        preferredTime: '',
-        durationHours: '',
+        sessionType: 'morning',
+        durationHours: '2',
         locationType: 'studio',
         locationOther: '',
-        message: ''
+        transactionReference: '',
+        message: '',
     });
 
     const [loading, setLoading] = useState(false);
@@ -37,103 +51,127 @@ function MContactModal({ isOpen, onClose, appointment }) {
     const [success, setSuccess] = useState('');
     const [validationErrors, setValidationErrors] = useState({});
     
+    // File upload states
+    const [receiptFile, setReceiptFile] = useState(null);
+    const [receiptPreview, setReceiptPreview] = useState(null);
+    const fileInputRef = useRef(null);
+    
     // Calendar states
     const [showCalendar, setShowCalendar] = useState(false);
-    const [availableTimeSlots, setAvailableTimeSlots] = useState({});
+    const [availableSessions, setAvailableSessions] = useState({
+        morning: true,
+        afternoon: true
+    });
     const [checkingAvailability, setCheckingAvailability] = useState(false);
-    const [selectedTimeRange, setSelectedTimeRange] = useState({ start: '', end: '' });
 
     // Authorization state
     const [authorized, setAuthorized] = useState(false);
+    
+    const [paymentMethod, setPaymentMethod] = useState('bank');
+
+    // Session options
+    const sessionOptions = [
+        { value: 'morning', label: 'Morning Session', time: '10:00 AM - 12:00 PM', icon: faSun },
+        { value: 'afternoon', label: 'Afternoon Session', time: '3:00 PM - 5:00 PM', icon: faCloudSun }
+    ];
 
     // Location options
     const locationOptions = [
         { value: 'studio', label: ' In-Studio Session' },
-        { value: 'client-home', label: ' Client\'s Home' },
-        { value: 'outdoor', label: ' Outdoor Location' },
-        { value: 'other', label: ' Other Location' }
+        { value: 'home-services', label: ' Home Services' },
     ];
 
-    // Fetch available time slots when date changes
+    // Fetch available sessions when date changes
     useEffect(() => {
         if (formData.preferredDate) {
-            fetchAvailableTimeSlots(formData.preferredDate);
+            fetchAvailableSessions(formData.preferredDate);
         } else {
-            setAvailableTimeSlots({});
+            setAvailableSessions({ morning: true, afternoon: true });
         }
     }, [formData.preferredDate]);
 
-    const fetchAvailableTimeSlots = async (date) => {
-    setCheckingAvailability(true);
-        try {
-            console.log(`🔍 Fetching available time slots for date: ${date}`);
-            const response = await fetch(`http://localhost:5000/api/appointments/available-time-slots?date=${date}`);
+    // Clean up preview URL when component unmounts or modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            if (receiptPreview) {
+                URL.revokeObjectURL(receiptPreview);
+            }
+            setReceiptFile(null);
+            setReceiptPreview(null);
+        }
+    }, [isOpen, receiptPreview]);
 
+    const fetchAvailableSessions = async (date) => {
+        setCheckingAvailability(true);
+        try {
+            const response = await fetch(`http://localhost:5000/api/appointments/available-sessions?date=${date}`);
             if (response.ok) {
                 const result = await response.json();
-                console.log('📦 Available time slots response:', result);
-                
                 if (result.success) {
-                    setAvailableTimeSlots(result.data || {});
-                    
-                    // Log which slots are available vs booked
-                    const bookedSlots = [];
-                    const availableSlotsList = [];
-                    for (const [time, isAvailable] of Object.entries(result.data)) {
-                        if (!isAvailable) {
-                            bookedSlots.push(time);
-                        } else {
-                            availableSlotsList.push(time);
-                        }
-                    }
-                    console.log('✅ Available slots:', availableSlotsList);
-                    console.log('❌ Booked slots:', bookedSlots);
+                    setAvailableSessions(result.data || { morning: true, afternoon: true });
                 }
-            } else {
-                console.error('❌ Failed to fetch time slots:', response.status);
             }
         } catch (error) {
-            console.error('Error fetching time slots:', error);
+            console.error('Error fetching sessions:', error);
         } finally {
             setCheckingAvailability(false);
         }
     };
 
-    // Check time slot availability with duration (for final submission verification)
-    const checkTimeSlotAvailability = async (date, time, duration) => {
+    // Check session availability for final submission verification
+    const checkSessionAvailability = async (date, sessionType) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/appointments/check-time-slot?date=${date}&time=${time}&durationHours=${duration}`);
+            const response = await fetch(`http://localhost:5000/api/appointments/check-session?date=${date}&session=${sessionType}`);
             if (response.ok) {
                 const result = await response.json();
                 return result;
             }
             return { isAvailable: true };
         } catch (error) {
-            console.error('Error checking time slot:', error);
+            console.error('Error checking session:', error);
             return { isAvailable: true };
         }
     };
 
-    // Calculate end time based on start time and duration
-    const calculateEndTime = (startTime, durationHours) => {
-        if (!startTime || !durationHours) return '';
-        const [hours, minutes] = startTime.split(':');
-        const endHour = parseInt(hours) + parseInt(durationHours);
-        return `${endHour.toString().padStart(2, '0')}:${minutes}`;
+    // Handle file selection
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+            setError('Please upload a valid file (JPEG, PNG, WEBP, or PDF)');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            setError('File size must be less than 5MB');
+            return;
+        }
+
+        setReceiptFile(file);
+        
+        if (file.type.startsWith('image/')) {
+            const previewUrl = URL.createObjectURL(file);
+            setReceiptPreview(previewUrl);
+        } else {
+            setReceiptPreview(null);
+        }
+        
+        setError('');
     };
 
-    // Update time range when time or duration changes
-    useEffect(() => {
-        if (formData.preferredTime && formData.durationHours) {
-            const endTime = calculateEndTime(formData.preferredTime, formData.durationHours);
-            setSelectedTimeRange({
-                start: formData.preferredTime,
-                end: endTime
-            });
-        } else {
-            setSelectedTimeRange({ start: '', end: '' });
+    // Remove selected file
+    const handleRemoveFile = () => {
+        if (receiptPreview) {
+            URL.revokeObjectURL(receiptPreview);
         }
-    }, [formData.preferredTime, formData.durationHours]);
+        setReceiptFile(null);
+        setReceiptPreview(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -142,13 +180,6 @@ function MContactModal({ isOpen, onClose, appointment }) {
             setValidationErrors(prev => ({ ...prev, [name]: '' }));
         }
         
-        // Clear time selection when duration changes
-        if (name === 'durationHours') {
-            setFormData(prev => ({ ...prev, preferredTime: '' }));
-            setSelectedTimeRange({ start: '', end: '' });
-        }
-        
-        // Reset other location when location type changes
         if (name === 'locationType') {
             if (value !== 'other') {
                 setFormData(prev => ({ ...prev, locationOther: '' }));
@@ -168,26 +199,23 @@ function MContactModal({ isOpen, onClose, appointment }) {
         const day = String(date.getDate()).padStart(2, '0');
         const dateString = `${year}-${month}-${day}`;
         
-        setFormData(prev => ({ ...prev, preferredDate: dateString, preferredTime: '' }));
+        setFormData(prev => ({ ...prev, preferredDate: dateString, sessionType: 'morning' }));
         setShowCalendar(false);
-        setSelectedTimeRange({ start: '', end: '' });
         if (validationErrors.preferredDate) {
             setValidationErrors(prev => ({ ...prev, preferredDate: '' }));
         }
         setError('');
     };
 
-    // SIMPLIFIED: No extra API call - dropdown already shows disabled options
-    const handleTimeSelect = (time) => {
-        if (!formData.durationHours) {
-            setError('Please select duration hours first');
+    const handleSessionSelect = (sessionType) => {
+        if (!formData.preferredDate) {
+            setError('Please select a date first');
             return;
         }
         
-        // Just set the time - no extra availability check needed
-        setFormData(prev => ({ ...prev, preferredTime: time }));
-        if (validationErrors.preferredTime) {
-            setValidationErrors(prev => ({ ...prev, preferredTime: '' }));
+        setFormData(prev => ({ ...prev, sessionType }));
+        if (validationErrors.sessionType) {
+            setValidationErrors(prev => ({ ...prev, sessionType: '' }));
         }
         setError('');
     };
@@ -219,16 +247,8 @@ function MContactModal({ isOpen, onClose, appointment }) {
             errors.preferredDate = 'Please select a preferred date';
         }
         
-        if (!formData.preferredTime) {
-            errors.preferredTime = 'Please select a preferred time';
-        }
-        
-        if (!formData.durationHours) {
-            errors.durationHours = 'Please enter duration hours';
-        } else if (isNaN(formData.durationHours) || formData.durationHours <= 0) {
-            errors.durationHours = 'Duration must be a positive number';
-        } else if (formData.durationHours > 8) {
-            errors.durationHours = 'Maximum duration is 8 hours';
+        if (!formData.sessionType) {
+            errors.sessionType = 'Please select a session time';
         }
         
         if (!formData.locationType) {
@@ -240,10 +260,17 @@ function MContactModal({ isOpen, onClose, appointment }) {
         } else if (formData.locationType === 'client-home' && !formData.locationClientHome?.trim()) {
             errors.location = 'Please enter the client home location';
         }
+
+        if (!formData.transactionReference?.trim()) errors.transactionReference = 'Please enter the transaction reference';
         
         // Add authorization validation
         if (!authorized) {
             errors.authorized = 'Please authorize to proceed';
+        }
+        
+        // Add receipt validation
+        if (!receiptFile) {
+            errors.receipt = 'Please upload your payment receipt';
         }
 
         setValidationErrors(errors);
@@ -254,15 +281,12 @@ function MContactModal({ isOpen, onClose, appointment }) {
         e.preventDefault();
         if (!validateForm()) return;
 
-        // Final verification before submission (prevents race conditions)
-        const availability = await checkTimeSlotAvailability(formData.preferredDate, formData.preferredTime, formData.durationHours);
+        const availability = await checkSessionAvailability(formData.preferredDate, formData.sessionType);
         
         if (!availability.isAvailable) {
-            setError(`This time slot is no longer available. Please select another time.`);
-            setFormData(prev => ({ ...prev, preferredTime: '' }));
-            setSelectedTimeRange({ start: '', end: '' });
-            // Refresh available time slots
-            fetchAvailableTimeSlots(formData.preferredDate);
+            setError(`This session is no longer available. Please select another time.`);
+            setFormData(prev => ({ ...prev, sessionType: '' }));
+            fetchAvailableSessions(formData.preferredDate);
             return;
         }
 
@@ -271,6 +295,26 @@ function MContactModal({ isOpen, onClose, appointment }) {
 
         try {
             const finalLocation = getFinalLocation();
+            const session = sessionOptions.find(s => s.value === formData.sessionType);
+            const [startTime, endTime] = session.time.split(' - ');
+            
+            let receiptUrl = null;
+            if (receiptFile) {
+                const uploadFormData = new FormData();
+                uploadFormData.append('receipt', receiptFile);
+                
+                const uploadResponse = await fetch('http://localhost:5000/api/appointments/upload-receipt', {
+                    method: 'POST',
+                    body: uploadFormData,
+                });
+                
+                if (uploadResponse.ok) {
+                    const uploadResult = await uploadResponse.json();
+                    receiptUrl = uploadResult.fileUrl;
+                } else {
+                    throw new Error('Failed to upload receipt');
+                }
+            }
             
             const response = await fetch(`http://localhost:5000/api/appointments/create`, {
                 method: 'POST',
@@ -281,10 +325,15 @@ function MContactModal({ isOpen, onClose, appointment }) {
                     phone: formData.phone.trim(),
                     packageType: formData.packageType,
                     preferredDate: formData.preferredDate,
-                    preferredTime: formData.preferredTime,
-                    durationHours: parseInt(formData.durationHours),
+                    preferredTime: startTime,
+                    endTime: endTime,
+                    durationHours: 2,
                     location: finalLocation,
-                    specialRequests: formData.message.trim() || ''
+                    specialRequests: formData.message.trim() || '',
+                    sessionType: formData.sessionType,    
+                    transactionReference: formData.transactionReference.trim() || '',
+                    paymentMethod: paymentMethod,
+                    receiptUrl: receiptUrl
                 }),
             });
 
@@ -293,7 +342,7 @@ function MContactModal({ isOpen, onClose, appointment }) {
             if (!response.ok) throw new Error(result.message || 'Failed to create appointment');
 
             if (result.success) {
-                setSuccess('Appointment submitted successfully! We will contact you within 24 hours.');
+                setSuccess('Appointment submitted successfully! Your receipt has been uploaded. We will verify your payment and confirm your booking within 24 hours.');
                 setTimeout(() => {
                     setSuccess('');
                     onClose();
@@ -313,27 +362,7 @@ function MContactModal({ isOpen, onClose, appointment }) {
     const packageOptions = [
         { value: 'newborn', label: 'Newborn Session' },
         { value: 'maternity', label: 'Maternity Session' },
-        { value: 'family', label: 'Family Session' },
-        { value: 'milestone', label: 'Milestone Session' },
-        { value: 'portrait', label: 'Portrait Session' },
-        { value: 'custom', label: 'Custom Package' }
     ];
-
-    // Generate time slots in 30-minute intervals
-    const generateTimeSlots = () => {
-        const slots = [];
-        for (let hour = 9; hour <= 20; hour++) {
-            for (let minute = 0; minute < 60; minute += 30) {
-                const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                if (timeString >= '09:00' && timeString <= '20:00') {
-                    slots.push(timeString);
-                }
-            }
-        }
-        return slots;
-    };
-
-    const timeSlots = generateTimeSlots();
 
     const styles = {
         bg: 'bg-white',
@@ -456,77 +485,56 @@ function MContactModal({ isOpen, onClose, appointment }) {
                             </div>
                         )}
 
-                        {/* Duration Hours */}
+                        {/* Session Selection */}
                         <div>
-                            <label className={`block text-xs ${styles.accent} mb-1 font-medium`}>Duration (Hours) *</label>
-                            <select 
-                                name='durationHours' 
-                                value={formData.durationHours} 
-                                onChange={handleChange}
-                                className={`w-full p-2.5 border ${validationErrors.durationHours ? 'border-red-400' : styles.border} rounded-lg text-sm focus:outline-none focus:ring-1 ${styles.focusRing}`}
-                            >
-                                <option value=''>Select duration</option>
-                                <option value='1'>1 hour</option>
-                                <option value='2'>2 hours</option>
-                                <option value='3'>3 hours</option>
-                                <option value='4'>4 hours</option>
-                                <option value='5'>5 hours</option>
-                                <option value='6'>6 hours</option>
-                                <option value='7'>7 hours</option>
-                                <option value='8'>8 hours</option>
-                            </select>
-                            {validationErrors.durationHours && <p className={`text-xs ${styles.error} mt-1`}>{validationErrors.durationHours}</p>}
-                            <p className="text-xs text-gray-400 mt-1">Select how many hours you need for the session</p>
-                        </div>
-
-                        {/* Preferred Time */}
-                        <div>
-                            <label className={`block text-xs ${styles.accent} mb-1 font-medium`}>Preferred Time *</label>
-                            <div className='relative'>
-                                <FontAwesomeIcon icon={faClock} className={`absolute left-3 top-1/2 -translate-y-1/2 ${styles.accent} text-sm`} />
-                                <select 
-                                    name='preferredTime' 
-                                    value={formData.preferredTime} 
-                                    onChange={(e) => handleTimeSelect(e.target.value)}
-                                    disabled={!formData.preferredDate || !formData.durationHours || checkingAvailability}
-                                    className={`w-full pl-10 p-2.5 border ${validationErrors.preferredTime ? 'border-red-400' : styles.border} rounded-lg text-sm focus:outline-none focus:ring-1 ${styles.focusRing} ${(!formData.preferredDate || !formData.durationHours) ? 'bg-gray-100 cursor-not-allowed' : ''}`}>
-                                    <option value=''>Select a time</option>
-                                    {timeSlots.map(time => {
-                                        const isAvailable = availableTimeSlots[time] !== false;
-                                        return (
-                                            <option 
-                                                key={time} 
-                                                value={time}
-                                                disabled={!isAvailable}
-                                            >
-                                                {time} {!isAvailable && '(Booked)'}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                                {checkingAvailability && (
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                        <FontAwesomeIcon icon={faSpinner} className="animate-spin text-gray-400" />
-                                    </div>
-                                )}
+                            <label className={`block text-xs ${styles.accent} mb-1 font-medium`}>Select Session Time *</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                {sessionOptions.map((session) => {
+                                    const isAvailable = !formData.preferredDate || availableSessions[session.value] !== false;
+                                    return (
+                                        <button
+                                            key={session.value}
+                                            type="button"
+                                            onClick={() => handleSessionSelect(session.value)}
+                                            disabled={!formData.preferredDate || !isAvailable}
+                                            className={`
+                                                p-3 rounded-lg border-2 transition-all duration-200 text-left
+                                                ${formData.sessionType === session.value 
+                                                    ? 'border-gray-600 bg-gray-50' 
+                                                    : 'border-gray-200 hover:border-gray-400'}
+                                                ${(!formData.preferredDate || !isAvailable) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                            `}
+                                        >
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <FontAwesomeIcon 
+                                                    icon={session.icon} 
+                                                    className={formData.sessionType === session.value ? 'text-gray-600' : 'text-gray-400'} 
+                                                />
+                                                <span className={`text-sm font-medium ${formData.sessionType === session.value ? 'text-gray-800' : 'text-gray-600'}`}>
+                                                    {session.label}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-500">{session.time}</p>
+                                            {!isAvailable && formData.preferredDate && (
+                                                <p className="text-xs text-red-500 mt-1">Fully Booked</p>
+                                            )}
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            {validationErrors.preferredTime && <p className={`text-xs ${styles.error} mt-1`}>{validationErrors.preferredTime}</p>}
-                            {(!formData.preferredDate || !formData.durationHours) && (
-                                <p className="text-xs text-gray-400 mt-1">Please select a date and duration first</p>
-                            )}
-                            
-                            {/* Time Range Display */}
-                            {selectedTimeRange.start && selectedTimeRange.end && (
-                                <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
-                                    <p className="text-xs text-blue-700 flex items-center gap-1">
-                                        <FontAwesomeIcon icon={faClock} className="text-xs" />
-                                        Your session will be from <strong>{selectedTimeRange.start}</strong> to <strong>{selectedTimeRange.end}</strong>
-                                    </p>
+                            {checkingAvailability && (
+                                <div className="flex items-center justify-center mt-2">
+                                    <FontAwesomeIcon icon={faSpinner} className="animate-spin text-gray-400" />
+                                    <span className="text-xs text-gray-400 ml-2">Checking availability...</span>
                                 </div>
                             )}
+                            {validationErrors.sessionType && <p className={`text-xs ${styles.error} mt-1`}>{validationErrors.sessionType}</p>}
+                            {!formData.preferredDate && (
+                                <p className="text-xs text-gray-400 mt-1">Please select a date first</p>
+                            )}
                         </div>
 
-                        {/* Location Selection - Dropdown with conditional input */}
+                        {/* Location Selection */}
                         <div>
                             <label className={`block text-xs ${styles.accent} mb-1 font-medium`}>Location *</label>
                             <div className='relative'>
@@ -545,20 +553,7 @@ function MContactModal({ isOpen, onClose, appointment }) {
                                 </select>
                             </div>
                             
-                            {formData.locationType === 'outdoor' && (
-                                <div className="mt-2">
-                                    <input
-                                        type='text'
-                                        name='locationOutdoor'
-                                        value={formData.locationOutdoor || ''} 
-                                        onChange={handleChange}
-                                        placeholder="Enter your location (address, landmark, etc.)"
-                                        className={`w-full p-2.5 border ${validationErrors.location ? 'border-red-400' : styles.border} rounded-lg text-sm focus:outline-none focus:ring-1 ${styles.focusRing}`}
-                                    />
-                                </div>
-                            )}
-                            
-                            {formData.locationType === 'client-home' && (
+                            {formData.locationType === 'home-services' && (
                                 <div className="mt-2">
                                     <input
                                         type='text'
@@ -570,22 +565,181 @@ function MContactModal({ isOpen, onClose, appointment }) {
                                     />
                                 </div>
                             )}
+                            {validationErrors.location && <p className={`text-xs ${styles.error} mt-1`}>{validationErrors.location}</p>}
+                        </div>
+
+                        {/* Payment Method Selection */}
+                        <div>
+                            <label className={`block text-xs ${styles.accent} mb-1 font-medium`}>Payment Method *</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('bank')}
+                                    className={`p-2 rounded-lg border text-xs font-medium transition-all ${
+                                        paymentMethod === 'bank' 
+                                            ? 'border-gray-600 bg-gray-50 text-gray-800' 
+                                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                                    }`}
+                                >
+                                    Bank Transfer
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('gcash')}
+                                    className={`p-2 rounded-lg border text-xs font-medium transition-all ${
+                                        paymentMethod === 'gcash' 
+                                            ? 'border-gray-600 bg-gray-50 text-gray-800' 
+                                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                                    }`}
+                                >
+                                    GCash
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Downpayment Image Section */}
+                        <div className="p-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+                            <div className="text-center mb-4">
+                                <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-3">
+                                    <FontAwesomeIcon icon={faQrcode} className="text-green-600 text-xl" />
+                                </div>
+                                <p className="text-sm text-gray-600 mb-2">
+                                    A 20% downpayment is required to reserve your preferred date and time.
+                                </p>
+                                <div className="bg-blue-50 rounded-lg p-2 mb-2">
+                                    <p className="text-xs text-blue-700 flex items-center justify-center gap-1">
+                                        <FontAwesomeIcon icon={faClock} className="text-xs" />
+                                        Your slot will be held for 24 hours while we verify your payment
+                                    </p>
+                                </div>
+                            </div>
                             
-                            {/* Conditional input for "Other" location */}
-                            {formData.locationType === 'other' && (
-                                <div className="mt-2">
-                                    <input
-                                        type='text'
-                                        name='locationOther'
-                                        value={formData.locationOther}
-                                        onChange={handleChange}
-                                        placeholder="Enter your location (address, landmark, etc.)"
-                                        className={`w-full p-2.5 border ${validationErrors.location ? 'border-red-400' : styles.border} rounded-lg text-sm focus:outline-none focus:ring-1 ${styles.focusRing}`}
-                                    />
+                            {/* Payment Details based on selection */}
+                            {paymentMethod === 'bank' && (
+                                <div className="bg-white rounded-lg p-3 mb-3">
+                                    <p className="text-xs font-medium text-gray-700 mb-2">Bank Transfer Details:</p>
+                                    <div className="space-y-1 text-xs">
+                                         <div className="flex justify-center mb-4">
+                                            <div className="bg-white p-3 rounded-xl shadow-md">
+                                                <img 
+                                                    src={bank} 
+                                                    alt="Payment QR Code" 
+                                                    className="w-40 h-40 object-contain"
+                                                />
+                                            </div>
+                                        </div>
+                                        <p className="text-gray-600"><span className="font-medium">Bank:</span> UnionBank</p>
+                                        <p className="text-gray-600"><span className="font-medium">Account Name:</span> Maple Street Photography</p>
+                                        <p className="text-gray-600"><span className="font-medium">Account Number:</span> 1234-5678-9012</p>
+                                    </div>
                                 </div>
                             )}
                             
-                            {validationErrors.location && <p className={`text-xs ${styles.error} mt-1`}>{validationErrors.location}</p>}
+                            {paymentMethod === 'gcash' && (
+                                <div className="bg-white rounded-lg p-3 mb-3">
+                                    <p className="text-xs font-medium text-gray-700 mb-2">GCash Details:</p>
+                                    <div className="space-y-1 text-xs">
+                                         <div className="flex justify-center mb-4">
+                                            <div className="bg-white p-3 rounded-xl shadow-md">
+                                                <img 
+                                                    src={gcash} 
+                                                    alt="Payment QR Code" 
+                                                    className="w-40 h-40 object-contain"
+                                                />
+                                            </div>
+                                        </div>
+                                        <p className="text-gray-600"><span className="font-medium">GCash Number:</span> 0916 170 1707</p>
+                                        <p className="text-gray-600"><span className="font-medium">Account Name:</span> Maple Street Photography</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Receipt Upload Section */}
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <label className="block text-xs text-gray-600 mb-2 font-medium">
+                                <FontAwesomeIcon icon={faUpload} className="mr-2" />
+                                Upload Payment Receipt/Proof *
+                            </label>
+                            
+                            <div 
+                                className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
+                                    validationErrors.receipt ? 'border-red-400 bg-red-50' : 'border-gray-300 hover:border-gray-400 bg-white'
+                                }`}
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleFileSelect}
+                                    accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                                    className="hidden"
+                                />
+                                
+                                {!receiptFile ? (
+                                    <div>
+                                        <FontAwesomeIcon icon={faFileImage} className="text-gray-400 text-3xl mb-2" />
+                                        <p className="text-sm text-gray-600">Click to upload receipt</p>
+                                        <p className="text-xs text-gray-400 mt-1">JPEG, PNG, WEBP, or PDF (Max 5MB)</p>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        {receiptPreview ? (
+                                            <div className="relative">
+                                                <img src={receiptPreview} alt="Receipt preview" className="max-h-32 mx-auto rounded-lg" />
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRemoveFile();
+                                                    }}
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                                                >
+                                                    <FontAwesomeIcon icon={faTimes} className="text-xs" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <FontAwesomeIcon icon={faCheckCircle} className="text-green-500" />
+                                                    <span className="text-sm text-gray-700">{receiptFile.name}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRemoveFile();
+                                                    }}
+                                                    className="text-red-500 hover:text-red-600"
+                                                >
+                                                    <FontAwesomeIcon icon={faTimes} />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            
+                            {validationErrors.receipt && (
+                                <p className={`text-xs ${styles.error} mt-2`}>{validationErrors.receipt}</p>
+                            )}
+                            
+                            <div className="mt-2 p-2 bg-yellow-100 rounded-lg">
+                                <p className="text-xs text-yellow-800 text-center">
+                                    ⚠️ Please upload a clear screenshot or photo of your payment transaction
+                                </p>
+                            </div>
+                             <div>
+                            <label className={`block text-xs ${styles.accent} mb-1 font-medium`}>Transaction reference *</label>
+                            <div className='relative'>
+                                <FontAwesomeIcon icon={faMoneyBillWave} className={`absolute left-3 top-1/2 -translate-y-1/2 ${styles.accent} text-sm`} />
+                                <input type='tel' name='phone' value={formData.phone} onChange={handleChange}
+                                    className={`w-full pl-10 p-2.5 border ${validationErrors.phone ? 'border-red-400' : styles.border} rounded-lg text-sm focus:outline-none focus:ring-1 ${styles.focusRing}`}
+                                    placeholder='Ex: TXNBK24041012345678 ' />
+                            </div>
+                            {validationErrors.transactionReference && <p className={`text-xs ${styles.error} mt-1`}>{validationErrors.transactionReference}</p>}
+                        </div>
                         </div>
 
                         {/* Special Requests */}
@@ -633,11 +787,11 @@ function MContactModal({ isOpen, onClose, appointment }) {
                             <button type='submit' disabled={loading}
                                 className={`w-full ${styles.buttonBg} text-white py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}>
                                 {loading ? <LoadingSpinner message="Submitting..." /> : <>
-                                    Book Appointment <FontAwesomeIcon icon={faPaperPlane} className='text-sm' />
+                                    Submit Booking & Receipt <FontAwesomeIcon icon={faPaperPlane} className='text-sm' />
                                 </>}
                             </button>
                             <div className='text-center pt-3'>
-                                <p className={`text-xs ${styles.accent}`}>We'll confirm your appointment within 24 hours via email or phone.</p>
+                                <p className={`text-xs ${styles.accent}`}>We'll verify your payment and confirm your booking within 24 hours.</p>
                             </div>
                         </div>
                     </form>

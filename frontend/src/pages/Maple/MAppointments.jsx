@@ -75,10 +75,6 @@ function MAppointments() {
     const typeOptions = [
         { value: 'newborn', label: 'Newborn' },
         { value: 'maternity', label: 'Maternity' },
-        { value: 'family', label: 'Family' },
-        { value: 'milestone', label: 'Milestone' },
-        { value: 'portrait', label: 'Portrait' },
-        { value: 'custom', label: 'Custom' },
     ];
 
     const fetchAppointments = useCallback(async () => {
@@ -128,21 +124,12 @@ function MAppointments() {
         });
     };
 
-    const formatTimeForExport = (timeString) => {
-        if (!timeString) return 'N/A';
-        const [hours, minutes] = timeString.split(':');
-        const hour = parseInt(hours);
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const hour12 = hour % 12 || 12;
-        return `${hour12}:${minutes} ${ampm}`;
-    };
-
     const exportToExcel = () => {
         const dataToExport = getDisplayAppointments();
         
         const headers = [
-            'ID', 'Client Name', 'Email', 'Phone', 'Package Type', 'Status',
-            'Date', 'Time', 'Duration (Hours)', 'Location', 'Special Requests', 'Notes', 'Created At', 'Last Updated'
+            'ID', 'Client Name', 'Email', 'Phone', 'Package Type', 'Session Type', 'Status',
+            'Date', 'Location', 'Special Requests', 'Notes', 'Payment Method', 'Created At', 'Last Updated'
         ];
 
         const rows = dataToExport.map(app => ({
@@ -151,18 +138,17 @@ function MAppointments() {
             'Email': app.email || 'N/A',
             'Phone': app.phone || 'N/A',
             'Package Type': app.packageType || 'N/A',
+            'Session Type': app.sessionType === 'morning' ? 'Morning (10AM-12PM)' : 'Afternoon (3PM-5PM)',
             'Status': app.status || 'N/A',
             'Date': formatDateForExport(app.preferredDate),
-            'Time': formatTimeForExport(app.preferredTime),
-            'Duration (Hours)': app.durationHours || 'N/A',
             'Location': app.location || 'N/A',
             'Special Requests': app.specialRequests || 'N/A',
             'Notes': app.notes || 'N/A',
+            'Payment Method': app.paymentMethod || 'N/A',
             'Created At': formatDateForExport(app.createdAt),
             'Last Updated': formatDateForExport(app.updatedAt)
         }));
 
-        // Create HTML table for Excel
         let htmlContent = `
             <html>
             <head>
@@ -315,8 +301,7 @@ function MAppointments() {
             
             if (rescheduleData && status === 'rescheduled') {
                 payload.rescheduleDate = rescheduleData.date;
-                payload.rescheduleTime = rescheduleData.time;
-                payload.rescheduleDuration = rescheduleData.duration;
+                payload.rescheduleSession = rescheduleData.session;
             }
 
             const response = await fetch(`http://localhost:5000/api/appointments/update/${appointmentId}`, {
@@ -364,11 +349,10 @@ function MAppointments() {
     const handleSaveEdit = async (data) => {
         if (selectedAppointment && selectedAppointment._id) {
             let rescheduleData = null;
-            if (data.status === 'rescheduled' && data.rescheduleDate && data.rescheduleTime) {
+            if (data.status === 'rescheduled' && data.rescheduleDate && data.rescheduleSession) {
                 rescheduleData = {
                     date: data.rescheduleDate,
-                    time: data.rescheduleTime,
-                    duration: data.rescheduleDuration
+                    session: data.rescheduleSession
                 };
             }
             
@@ -653,7 +637,7 @@ function MAppointments() {
     if (loading) return <LoadingSpinner message="Loading appointments..." />;
 
     return (
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8">  
+        <div className="w-full px-4 sm:px-6 py-4 sm:py-6 md:py-8 overflow-x-auto">  
             {/* Success Message */}
             {successMessage && (
                 <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
@@ -670,7 +654,7 @@ function MAppointments() {
             )}
 
             {/* Header with Export Button */}
-            <header className="mb-8">
+            <header className="mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                     <div>
                         <p className="text-sm font-light text-gray-500 mb-2 tracking-wider">APPOINTMENTS</p>
@@ -762,26 +746,28 @@ function MAppointments() {
                 theme="maple"
             />
 
-            <AppointmentTable 
-                appointments={currentItems}
-                onSort={handleSort}
-                sortConfig={sortConfig}
-                getSortIcon={getSortIcon}
-                onView={handleViewClick}
-                onEdit={handleEditClick}
-                onDelete={handleDelete}
-                updatingId={updatingId}
-                StatusBadge={StatusBadge}
-                currentPage={currentPage}
-                itemsPerPage={itemsPerPage}
-                isSelectMode={isSelectMode}
-                selectedAppointments={selectedAppointments}
-                onSelectAppointment={handleSelectAppointment}
-            />
+            <div className="overflow-x-auto">
+                <AppointmentTable 
+                    appointments={currentItems}
+                    onSort={handleSort}
+                    sortConfig={sortConfig}
+                    getSortIcon={getSortIcon}
+                    onView={handleViewClick}
+                    onEdit={handleEditClick}
+                    onDelete={handleDelete}
+                    updatingId={updatingId}
+                    StatusBadge={StatusBadge}
+                    currentPage={currentPage}
+                    itemsPerPage={itemsPerPage}
+                    isSelectMode={isSelectMode}
+                    selectedAppointments={selectedAppointments}
+                    onSelectAppointment={handleSelectAppointment}
+                />
+            </div>
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 flex-wrap gap-4">
                     <div className="text-sm text-gray-500">
                         Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredAppointments.length)} of {filteredAppointments.length} appointments
                     </div>
