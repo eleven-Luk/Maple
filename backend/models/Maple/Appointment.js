@@ -23,7 +23,7 @@ const appointmentSchema = new mongoose.Schema({
     // Appointment Details
     packageType: {
         type: String,
-        enum: ['newborn', 'maternity'],
+        enum: ['coral', 'crimson', 'gold'],
         required: [true, 'Package type is required'],
         trim: true,
     },
@@ -49,8 +49,12 @@ const appointmentSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['bank', 'gcash', ],
-        default: 'bank'
+        enum: ['gcash', 'metrobank', 'securityBank'],
+        default: 'gcash'
+    },
+    downpaymentAmount: {
+        type: Number,
+        default: 0
     },
     paymentAmount: {
         type: Number,
@@ -70,7 +74,8 @@ const appointmentSchema = new mongoose.Schema({
     },
     transactionReference: {
         type: String,
-        default: null
+        default: '', 
+        trim: true
     },
 
 

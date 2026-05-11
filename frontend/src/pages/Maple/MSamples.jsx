@@ -6,23 +6,20 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
     faPlus, 
     faBox, 
-    faFire,
-    faTimes,
     faCheckCircle,
-    faSort,
-    faSortUp,
-    faSortDown,
     faAngleDoubleLeft,
     faChevronLeft,
     faChevronRight,
     faAngleDoubleRight,
-    faCamera,
     faEdit,
     faTrash,
     faEye,
     faImage,
     faStar,
-    faMapMarkerAlt
+    faMapMarkerAlt,
+    faImages,
+    faVenus,
+    faMars
 } from '@fortawesome/free-solid-svg-icons';
 import FilterBar from "../../components/common/FilterBar.jsx";
 
@@ -37,14 +34,7 @@ function MSamples() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedSample, setSelectedSample] = useState(null);
-    
     const [successMessage, setSuccessMessage] = useState('');
-
-    // Sorting states
-    const [sortConfig, setSortConfig] = useState({
-        key: 'createdAt',
-        direction: 'desc'
-    });
 
     // Modal States
     const [showAddModal, setShowAddModal] = useState(false);
@@ -55,10 +45,9 @@ function MSamples() {
 
     // Filter states
     const [searchTerm, setSearchTerm] = useState('');
-    const [showNewSample, setShowNewSample] = useState(false);
-    const [newSamples, setNewSamples] = useState([]);
-    const [categoryFilter, setCategoryFilter] = useState('all');
-    const [featuredFilter, setFeaturedFilter] = useState('all');
+    const [setupTypeFilter, setSetupTypeFilter] = useState('all');
+    const [genderFilter, setGenderFilter] = useState('all');
+    
 
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
@@ -66,28 +55,36 @@ function MSamples() {
 
     const navigate = useNavigate();
 
-    // Category options
-    const categoryOptions = [
-        { value: 'newborn', label: 'Newborn' },
-        { value: 'maternity', label: 'Maternity' },
-        { value: 'family', label: 'Family' },
-        { value: 'toddler', label: 'Toddler' },
-        { value: 'milestone', label: 'Milestone' },
-        { value: 'wedding', label: 'Wedding' },
+    // Setup type options
+    const setupTypeOptions = [
+
+        { value: 'basket', label: 'Basket' },
+        { value: 'fur', label: 'Fur' },
+        { value: 'bean&bed', label: 'Bean & Bed' },
     ];
 
-    const featuredOptions = [
-        { value: 'all', label: 'All' },
-        { value: 'featured', label: 'Featured' },
-        { value: 'not-featured', label: 'Not Featured' },
+    const genderOptions = [
+        { value: 'boy', label: 'Boy' },
+        { value: 'girl', label: 'Girl' },
     ];
+
+
 
     const fetchSamples = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5000/api/samples/all', {
+            
+            const params = new URLSearchParams();
+            if (setupTypeFilter !== 'all') params.append('setupType', setupTypeFilter);
+            if (genderFilter !== 'all') params.append('gender', genderFilter);
+    
+            
+            const queryString = params.toString();
+            const url = `http://localhost:5000/api/samples/all${queryString ? `?${queryString}` : ''}`;
+            
+            const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -98,12 +95,7 @@ function MSamples() {
             const result = await response.json();
 
             if (result.success) {
-                const sortedSamples = (result.data || []).sort((a, b) =>
-                    new Date(b.createdAt) - new Date(a.createdAt)
-                );
-                setSamples(sortedSamples);
-                setSuccessMessage('Samples fetched successfully');
-                setTimeout(() => setSuccessMessage(''), 3000);
+                setSamples(result.data || []);
             } else {
                 throw new Error(result.message || 'Failed to fetch samples');
             }
@@ -113,7 +105,7 @@ function MSamples() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [setupTypeFilter, genderFilter]);
 
     useEffect(() => {
         fetchSamples();
@@ -122,10 +114,9 @@ function MSamples() {
     const handleAddSample = async (formDataToSend) => {
         try {
             const token = localStorage.getItem('token');
-
             if (!token) {
-                console.log('Please login first');
-                return navigate('/login');
+                navigate('/login');
+                return;
             }
 
             const response = await fetch('http://localhost:5000/api/samples/create', {
@@ -139,29 +130,21 @@ function MSamples() {
             const result = await response.json();
 
             if (result.success) {
-                // Add the new sample to the beginning of the list
                 setSamples(prev => [result.data, ...prev]);
                 setSuccessMessage('Sample added successfully!');
                 setTimeout(() => setSuccessMessage(''), 3000);
-                
-                // Close modal and reset form (handled in modal)
                 setShowAddModal(false);
-                
-                // Refresh the list to ensure latest data
                 await fetchSamples();
-                
                 return result;
             } else {
                 throw new Error(result.message || 'Failed to add sample');
             }
-
         } catch (error) {
             console.error('Error adding sample:', error);
             setError(error.message || 'Failed to add sample');
             throw error;
         }
     };
-
 
     const handleEditSuccess = async (formDataToSend) => {
         try {
@@ -202,14 +185,11 @@ function MSamples() {
         }
     };
 
-
     const handleDeleteSample = async (sampleId) => {
         try {
             setDeleteLoading(true);
             const token = localStorage.getItem('token');
-
             if (!token) {
-                setError('Please login first');
                 navigate('/login');
                 return;
             }
@@ -218,7 +198,6 @@ function MSamples() {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
                 }
             });
 
@@ -226,11 +205,6 @@ function MSamples() {
 
             if (result.success) {
                 setSamples(prev => prev.filter(sample => sample._id !== sampleId));
-                
-                if (showNewSample) {
-                    setNewSamples(prev => prev.filter(sample => sample._id !== sampleId));
-                }
-                
                 setSuccessMessage('Sample deleted successfully!');
                 setTimeout(() => setSuccessMessage(''), 3000);
                 setShowDeleteModal(false);
@@ -247,132 +221,19 @@ function MSamples() {
         }
     };
 
-    const handleEdit = (sample) => {
-        setSelectedSample(sample);
-        setShowEditModal(true);
-    };
-
-    const handleView = (sample) => {
-        setSelectedSample(sample);
-        setShowViewModal(true);
-    };
-
-    const handleDelete = (sample) => {
-        setSelectedSample(sample);
-        setShowDeleteModal(true);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (selectedSample) {
-            await handleDeleteSample(selectedSample._id);
-        }
-    };
-
-    // Filter handlers
-    const handleSearch = (e) => {
-        setSearchTerm(e.target.value);
-        setCurrentPage(1);
-
-        if (showNewSample) {
-            setShowNewSample(false);
-            setNewSamples([]);
-        }
-    };
-
-    const handleCategoryFilter = (e) => {
-        setCategoryFilter(e.target.value);
-        setCurrentPage(1);
-
-        if (showNewSample) {
-            setShowNewSample(false);
-            setNewSamples([]);
-        }
-    };
-
-    const handleFeaturedFilter = (e) => {
-        setFeaturedFilter(e.target.value);
-        setCurrentPage(1);
-
-        if (showNewSample) {
-            setShowNewSample(false);
-            setNewSamples([]);
-        }
-    };
-
-    const identifyNewSamples = () => {
-        const recent = [...samples].sort((a, b) => {
-            const dateA = new Date(a.createdAt || 0);
-            const dateB = new Date(b.createdAt || 0);
-            return dateB - dateA;
-        }).slice(0, 3);
-        setNewSamples(recent);
-        setShowNewSample(true);
-        setSearchTerm('');
-        setCategoryFilter('all');
-        setFeaturedFilter('all');
-        setCurrentPage(1);
-    };
-
-    const clearFilters = () => {
-        setSearchTerm('');
-        setCategoryFilter('all');
-        setFeaturedFilter('all');
-        setShowNewSample(false);
-        setNewSamples([]);
-        setCurrentPage(1);
-    };
-
     const getDisplaySamples = () => {
         let displaySamples = [...samples];
 
-        // Apply search filter
         if (searchTerm) {
             displaySamples = displaySamples.filter(sample => 
                 sample.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 sample.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 sample.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                sample.category?.toLowerCase().includes(searchTerm.toLowerCase())
+                sample.setupType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                sample.gender?.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
 
-        // Apply category filter
-        if (categoryFilter !== 'all') {
-            displaySamples = displaySamples.filter(sample => sample.category === categoryFilter);
-        }
-
-        // Apply featured filter
-        if (featuredFilter !== 'all') {
-            if (featuredFilter === 'featured') {
-                displaySamples = displaySamples.filter(sample => sample.featured === true);
-            } else if (featuredFilter === 'not-featured') {
-                displaySamples = displaySamples.filter(sample => sample.featured !== true);
-            }
-        }
-
-        // Apply new samples filter
-        if (showNewSample) {
-            displaySamples = newSamples;
-        }
-
-        // Apply sorting
-        displaySamples.sort((a, b) => {
-            let aValue = a[sortConfig.key];
-            let bValue = b[sortConfig.key];
-
-            if (sortConfig.key === 'createdAt') {
-                aValue = new Date(aValue);
-                bValue = new Date(bValue);
-            }
-
-            if (sortConfig.key === 'title') {
-                aValue = a.title || '';
-                bValue = b.title || '';
-            }
-
-            if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
         return displaySamples;
     };
 
@@ -384,17 +245,12 @@ function MSamples() {
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;    
     const currentItems = filteredSamples.slice(indexOfFirstItem, indexOfLastItem);
 
-    // Navigation
-    const goToPage = (page) => {
-        setCurrentPage(Math.min(Math.max(1, page), totalPages));
-    };
-
+    const goToPage = (page) => setCurrentPage(Math.min(Math.max(1, page), totalPages));
     const goToFirstPage = () => goToPage(1);
     const goToLastPage = () => goToPage(totalPages);
     const goToNextPage = () => goToPage(currentPage + 1);
     const goToPreviousPage = () => goToPage(currentPage - 1);
 
-    // Generate Page numbers
     const getPageNumbers = () => {
         const maxButtons = 5;
         const pages = [];
@@ -412,52 +268,73 @@ function MSamples() {
         return pages;
     };
 
-    const pageNumbers = getPageNumbers();
-    const showStartPage = pageNumbers[0] > 1;
-    const showEndPage = pageNumbers[pageNumbers.length - 1] < totalPages;
+    // Format setup type for display
+    const formatSetupType = (setupType) => {
+        if (!setupType) return '';
+        return setupType
+            .replace(/&/g, ' & ')
+            .split(/[\s-]+/)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
 
-    // Sample Card Component - FIXED
+    // Sample Card Component
     const SampleCard = ({ sample, onView, onEdit, onDelete }) => {
-        // Get the full image URL
         const getImageUrl = (imagePath) => {
             if (!imagePath) return 'https://via.placeholder.com/400x300?text=No+Image';
-            // If it's already a full URL, return it
             if (imagePath.startsWith('http')) return imagePath;
-            // Otherwise, prepend the base URL
             return `http://localhost:5000${imagePath}`;
         };
 
-        const handleCardClick = (e) => {
-            if (e.target.closest('.action-button')) {
-                return;
-            }
-            onView(sample);
+        const primaryImage = sample.images?.find(img => img.isPrimary) || sample.images?.[0];
+        const imageUrl = primaryImage?.url || sample.image;
+
+        const setupColors = {
+            basket: 'from-amber-400 to-orange-500',
+            fur: 'from-purple-300 to-purple-500',
+            bean: 'from-green-400 to-emerald-500'
         };
 
-
         return (
-            <div className="group bg-white border border-gray-200 hover:border-gray-400 hover:shadow-lg transition-all duration-300 rounded-xl overflow-hidden"
-                onClick={handleCardClick}
-            >
+            <div className="group bg-white border border-gray-200 hover:border-gray-400 hover:shadow-lg transition-all duration-300 rounded-xl overflow-hidden">
                 <div className="relative h-48 overflow-hidden">
                     <img 
-                        src={getImageUrl(sample.image)} 
+                        src={getImageUrl(imageUrl)} 
                         alt={sample.title}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                         onError={(e) => {
                             e.target.src = 'https://via.placeholder.com/400x300?text=Image+Not+Found';
                         }}
                     />
+                    
+                    {sample.images && sample.images.length > 1 && (
+                        <span className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 z-10">
+                            <FontAwesomeIcon icon={faImages} className="text-xs" />
+                            {sample.images.length}
+                        </span>
+                    )}
+                    
                     {sample.featured && (
                         <span className="absolute top-3 left-3 bg-yellow-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 z-10">
                             <FontAwesomeIcon icon={faStar} className="text-xs" />
                             Featured
                         </span>
                     )}
+                    
+                    <span className={`absolute bottom-3 left-3 bg-gradient-to-r ${setupColors[sample.setupType] || 'from-gray-500 to-gray-700'} text-white text-xs px-2 py-1 rounded-full`}>
+                        {formatSetupType(sample.setupType)}
+                    </span>
+                    
+                    <span className="absolute bottom-3 right-3 bg-white/90 text-gray-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                        <FontAwesomeIcon icon={sample.gender === 'boy' ? faMars : faVenus} className={sample.gender === 'boy' ? 'text-blue-500' : 'text-pink-500'} />
+                        {sample.gender?.charAt(0).toUpperCase() + sample.gender?.slice(1)}
+                    </span>
                 </div>
                 <div className="p-4">
                     <h3 className="font-semibold text-gray-800 text-lg mb-1 line-clamp-1">{sample.title}</h3>
-                    <p className="text-xs text-gray-500 mb-2">{sample.category} • {sample.subCategory}</p>
+                    <p className="text-xs text-gray-500 mb-2">
+                        {formatSetupType(sample.setupType)} • {sample.gender?.charAt(0).toUpperCase() + sample.gender?.slice(1)}
+                    </p>
                     <p className="text-sm text-gray-600 line-clamp-2 mb-3">{sample.description}</p>
                     <div className="flex items-center justify-between text-xs text-gray-400 mb-3">
                         <span className="flex items-center gap-1">
@@ -468,21 +345,21 @@ function MSamples() {
                     </div>
                     <div className="flex flex-row gap-2">
                         <button 
-                            onClick={() => onView(sample)}
+                            onClick={(e) => { e.stopPropagation(); onView(sample); }}
                             className="flex-1 py-2 text-sm text-gray-500 hover:text-orange-600 border border-gray-200 rounded-lg hover:border-orange-400 transition-all flex items-center justify-center gap-2"
                         >
                             <FontAwesomeIcon icon={faEye} className="text-xs" />
                             View
                         </button>
                         <button 
-                            onClick={() => onEdit(sample)}
+                            onClick={(e) => { e.stopPropagation(); onEdit(sample); }}
                             className="flex-1 py-2 text-sm text-gray-500 hover:text-blue-600 border border-gray-200 rounded-lg hover:border-blue-400 transition-all flex items-center justify-center gap-2"
                         >
                             <FontAwesomeIcon icon={faEdit} className="text-xs" />
                             Edit
                         </button>
                         <button 
-                            onClick={() => onDelete(sample)}
+                            onClick={(e) => { e.stopPropagation(); onDelete(sample); }}
                             className="flex-1 py-2 text-sm text-gray-500 hover:text-red-600 border border-gray-200 rounded-lg hover:border-red-400 transition-all flex items-center justify-center gap-2"
                         >
                             <FontAwesomeIcon icon={faTrash} className="text-xs" />
@@ -494,18 +371,46 @@ function MSamples() {
         );
     };
 
+    const handleView = (sample) => {
+        setSelectedSample(sample);
+        setShowViewModal(true);
+    };
+
+    const handleEdit = (sample) => {
+        setSelectedSample(sample);
+        setShowEditModal(true);
+    };
+
+    const handleDelete = (sample) => {
+        setSelectedSample(sample);
+        setShowDeleteModal(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (selectedSample) {
+            await handleDeleteSample(selectedSample._id);
+        }
+    };
+
+    const clearFilters = () => {
+        setSearchTerm('');
+        setSetupTypeFilter('all');
+        setGenderFilter('all');
+        setFeaturedFilter('all');
+        setCurrentPage(1);
+    };
 
     if (loading) return <LoadingSpinner message='Loading samples...' />;
 
     if (error) {
         return (
             <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8">
-                <div className="bg-white border border-gray-200 p-8 text-center">
-                    <p className="text-6xl text-gray-200 mb-4">—</p>
+                <div className="bg-white border border-gray-200 p-8 text-center rounded-xl">
+                    <FontAwesomeIcon icon={faImage} className="text-6xl text-gray-200 mb-4" />
                     <p className="text-gray-500 font-light mb-4">Error: {error}</p>
                     <button 
                         onClick={fetchSamples}
-                        className="px-6 py-2 border border-gray-300 text-gray-600 text-sm font-light tracking-wider hover:border-gray-900 hover:text-gray-900 hover:bg-stone-50 transition-all duration-300"
+                        className="px-6 py-2 border border-gray-300 text-gray-600 text-sm font-light tracking-wider hover:border-gray-900 hover:text-gray-900 hover:bg-stone-50 transition-all duration-300 rounded-lg"
                     >
                         RETRY
                     </button>
@@ -516,7 +421,6 @@ function MSamples() {
 
     return (
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8">   
-            {/* Success Message */}
             {successMessage && (
                 <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
                     <FontAwesomeIcon icon={faCheckCircle} className="text-green-500" />
@@ -524,23 +428,17 @@ function MSamples() {
                 </div>
             )}
 
-            {/* Error Message */}
-            {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <span className="text-red-700">{error}</span>
-                </div>
-            )}
-
-            {/* Header */}
             <header className="mb-8">
                 <p className="text-sm font-light text-gray-500 mb-2 tracking-wider">PHOTOGRAPHY SAMPLES</p>
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-gray-800 font-light">MANAGE YOUR PORTFOLIO SAMPLES</p>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <FontAwesomeIcon icon={faImage} />
-                        <span>Total: {samples.length}</span>
+                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex items-center gap-1">
+                            <FontAwesomeIcon icon={faImages} />
+                            <span>Total: {samples.length}</span>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -548,39 +446,41 @@ function MSamples() {
             <div className="mb-6 flex justify-end">
                 <button
                     onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-600 text-sm font-light tracking-wider hover:border-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-300"
+                    className="flex items-center gap-2 px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-all duration-300 shadow-sm hover:shadow-md"
                 >
                     <FontAwesomeIcon icon={faPlus} className='text-xs'/>
                     <span>ADD SAMPLE</span>
                 </button>
             </div>
 
-            {/* Filter Bar */}
+            {/* FilterBar using available props */}
             <FilterBar 
                 searchTerm={searchTerm}
-                onSearchChange={handleSearch}
+                onSearchChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                }}
                 searchPlaceholder="Search samples..."
                 
-                // Category filter dropdown
-                filterOptions={categoryOptions}
-                filterValue={categoryFilter}
-                onFilterChange={handleCategoryFilter}
-                filterPlaceholder="Filter by Category"
+                // Setup Type filter
+                filterOptions={setupTypeOptions}
+                filterValue={setupTypeFilter}
+                onFilterChange={(e) => {
+                    setSetupTypeFilter(e.target.value);
+                    setCurrentPage(1);
+                }}
+                filterPlaceholder="All Setups"
+                
+                // Gender filter using filterTypeOptions
+                filterTypeOptions={genderOptions}
+                filterTypeValue={genderFilter}
+                onFilterTypeChange={(e) => {
+                    setGenderFilter(e.target.value);
+                    setCurrentPage(1);
+                }}
+                filterTypePlaceholder="All Genders"                
 
-                // Featured filter dropdown
-                filterStatusOptions={featuredOptions}
-                filterStatusValue={featuredFilter}
-                onFilterStatusChange={handleFeaturedFilter}
-                filterStatusPlaceholder="Filter by Featured"
                 
-                // New Sample filter
-                showSpecialFilter={true}
-                specialFilterLabel="NEW SAMPLES"
-                specialFilterIcon={faFire}
-                onSpecialFilterClick={identifyNewSamples}
-                isSpecialFilterActive={showNewSample}
-                
-                // Results count and refresh
                 resultsCount={filteredSamples.length}
                 resultsLabel="SAMPLES"
                 onRefresh={fetchSamples}
@@ -588,14 +488,13 @@ function MSamples() {
                 theme="maple"
             />
 
-            {/* Samples Grid */}
             <div>
                 {currentItems.length === 0 ? (
                     <div className="bg-white border border-gray-200 p-16 text-center rounded-xl">
                         <FontAwesomeIcon icon={faBox} className="text-5xl text-gray-200 mb-4" />
                         <p className="text-gray-500 font-light mb-2">No samples found</p>
                         <p className="text-sm text-gray-400 font-light">
-                            {searchTerm ? 'Try a different search term' : 'Add a new sample to get started'}
+                            {searchTerm || setupTypeFilter !== 'all' || genderFilter !== 'all' || featuredFilter !== 'all' ? 'Try adjusting your filters' : 'Add a new sample to get started'}
                         </p>
                     </div>
                 ) : (
@@ -613,7 +512,6 @@ function MSamples() {
                 )}
             </div>
 
-            {/* Pagination Controls */}
             {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
                     <div className="text-sm text-gray-500">
@@ -621,69 +519,35 @@ function MSamples() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button onClick={goToFirstPage} disabled={currentPage === 1} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                        <button onClick={goToFirstPage} disabled={currentPage === 1} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <FontAwesomeIcon icon={faAngleDoubleLeft} className="text-xs" />
                         </button>
-                        <button onClick={goToPreviousPage} disabled={currentPage === 1} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                        <button onClick={goToPreviousPage} disabled={currentPage === 1} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <FontAwesomeIcon icon={faChevronLeft} className="text-xs" />
                         </button>
 
                         <div className="flex items-center gap-1">
-                            {showStartPage && <span className="px-2 py-1.5 text-gray-400">...</span>}
-                            {pageNumbers.map(page => (
-                                <button key={page} onClick={() => goToPage(page)} className={`px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors ${currentPage === page ? 'border-gray-500 bg-gray-500 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+                            {getPageNumbers().map(page => (
+                                <button key={page} onClick={() => goToPage(page)} className={`px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors ${currentPage === page ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
                                     {page}
                                 </button>
                             ))}
-                            {showEndPage && <span className="px-2 py-1.5 text-gray-400">...</span>}
                         </div>
 
-                        <button onClick={goToNextPage} disabled={currentPage === totalPages} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                        <button onClick={goToNextPage} disabled={currentPage === totalPages} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <FontAwesomeIcon icon={faChevronRight} className="text-xs" />
                         </button>
-                        <button onClick={goToLastPage} disabled={currentPage === totalPages} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                        <button onClick={goToLastPage} disabled={currentPage === totalPages} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <FontAwesomeIcon icon={faAngleDoubleRight} className="text-xs" />
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Modals */}
-            <AddSampleModal 
-                isOpen={showAddModal} 
-                onClose={() => setShowAddModal(false)} 
-                onSave={handleAddSample} 
-            />
-
-            <ViewSampleModal 
-                isOpen={showViewModal} 
-                onClose={() => {
-                    setShowViewModal(false);
-                    setSelectedSample(null);
-                }} 
-                sample={selectedSample} 
-            />
-
-            <EditSampleModal 
-                isOpen={showEditModal} 
-                onClose={() => {
-                    setShowEditModal(false);
-                    setSelectedSample(null);
-                }} 
-                onSave={handleEditSuccess} 
-                sample={selectedSample} 
-            />
-            
-            <DeleteSampleModal 
-                isOpen={showDeleteModal} 
-                onClose={() => {
-                    setShowDeleteModal(false);
-                    setSelectedSample(null);
-                }} 
-                onConfirm={handleConfirmDelete} 
-                sample={selectedSample}
-                loading={deleteLoading}
-            />
+            <AddSampleModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleAddSample} />
+            <ViewSampleModal isOpen={showViewModal} onClose={() => { setShowViewModal(false); setSelectedSample(null); }} sample={selectedSample} />
+            <EditSampleModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedSample(null); }} onSave={handleEditSuccess} sample={selectedSample} />
+            <DeleteSampleModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setSelectedSample(null); }} onConfirm={handleConfirmDelete} sample={selectedSample} loading={deleteLoading} />
         </div>
     );
 }

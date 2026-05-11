@@ -1,6 +1,6 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { registerUser, loginUser, resendOTP } from '../controllers/authController.js';
+import { registerUser, loginUser, resendOTP, forgotPassword, verifyResetOTP, resetPassword } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -28,5 +28,8 @@ const resendOTPValidation = [
 router.post('/register', registerValidation, registerUser);
 router.post('/login', loginValidation, loginUser);
 router.post('/resend-otp', resendOTPValidation, resendOTP);
+router.post('/forgot-password', forgotPassword);
+router.post('/verify-reset-otp', verifyResetOTP);
+router.post('/reset-password', resetPassword);
 
 export default router;

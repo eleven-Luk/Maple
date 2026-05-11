@@ -54,8 +54,9 @@ const AppointmentTable = ({
     // Format package type
     const formatPackageType = (type) => {
         const typeMap = {
-            'newborn': 'Newborn Session',
-            'maternity': 'Maternity Session'
+            'coral': 'Coral Package',
+            'crimson': 'Crimson Package (Best Seller)',
+            'gold': 'Gold Package'
         };
         return typeMap[type?.toLowerCase()] || type || 'N/A';
     };
@@ -73,9 +74,9 @@ const AppointmentTable = ({
     // Format payment method
     const formatPaymentMethod = (method) => {
         const methods = {
-            'bank': 'Bank Transfer',
+            'metrobank': 'Metrobank Transfer',
+            'securitybank': 'Security Bank Transfer',
             'gcash': 'GCash',
-            'none': 'Not Specified'
         };
         return methods[method] || method || 'Not Specified';
     };

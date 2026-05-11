@@ -49,17 +49,18 @@ function ViewModalApp({ isOpen, onClose, appointment }) {
 
     const formatPackageType = (type) => {
         const typeMap = {
-            'newborn': 'Newborn Session',
-            'maternity': 'Maternity Session'
+            'coral': 'Coral Package',
+            'crimson': 'Crimson Package (Best Seller)',
+            'gold': 'Gold Package'
         };
         return typeMap[type?.toLowerCase()] || type || 'N/A';
     };
 
     const formatPaymentMethod = (method) => {
         const methods = {
-            'bank': 'Bank Transfer',
+            'metrobank': 'Metrobank Transfer',
+            'securityBank': 'Security Bank Transfer',
             'gcash': 'GCash',
-            'none': 'Not Specified'
         };
         return methods[method] || method || 'Not Specified';
     };

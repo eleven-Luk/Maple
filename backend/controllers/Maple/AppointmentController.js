@@ -1,3 +1,4 @@
+// controllers/Maple/AppointmentController.js
 import mongoose from 'mongoose';
 import Appointment from "../../models/Maple/Appointment.js";
 import UnavailableDate from "../../models/Maple/UnavailableDate.js";
@@ -109,7 +110,7 @@ export const uploadReceipt = async (req, res) => {
     }
 };
 
-// Send status update email
+// ==================== SEND STATUS UPDATE EMAIL ====================
 const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
     const sessionInfo = appointment.sessionType === 'morning' 
         ? 'Morning Session (10:00 AM - 12:00 PM)' 
@@ -157,12 +158,8 @@ const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                </style>
             </head>
-            <body style="font-family: 'Inter', 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                 <div style="max-width: 550px; margin: 50px auto; background: white; border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
                     <div style="background: ${statusColors[newStatus]}; padding: 40px 30px; text-align: center;">
                         <div style="font-size: 56px; margin-bottom: 15px;">${statusIcons[newStatus]}</div>
@@ -172,7 +169,7 @@ const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
                     
                     <div style="padding: 40px 35px;">
                         <div style="text-align: center; margin-bottom: 30px;">
-                            <div style="display: inline-block; padding: 8px 24px; background: ${statusColors[newStatus]}15; border-radius: 50px; border: 1px solid ${statusColors[newStatus]}30;">
+                            <div style="display: inline-block; padding: 8px 24px; background: ${statusColors[newStatus]}15; border-radius: 50px;">
                                 <span style="color: ${statusColors[newStatus]}; font-weight: 600; text-transform: uppercase; font-size: 12px;">${statusTitles[newStatus].toUpperCase()}</span>
                             </div>
                         </div>
@@ -183,7 +180,7 @@ const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
                             <p style="color: #1f2937; line-height: 1.7; margin: 0; font-size: 15px;">${statusMessages[newStatus]}</p>
                         </div>
                         
-                        <div style="background: #f9fafb; border-radius: 16px; padding: 25px; margin: 25px 0; border: 1px solid #e5e7eb;">
+                        <div style="background: #f9fafb; border-radius: 16px; padding: 25px; margin: 25px 0;">
                             <h3 style="color: #374151; margin: 0 0 20px 0; font-size: 16px; font-weight: 600;">📋 Appointment Details</h3>
                             <div style="display: grid; gap: 15px;">
                                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -211,7 +208,7 @@ const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
                                     <span style="font-size: 22px;">📦</span>
                                     <div>
                                         <p style="color: #6b7280; font-size: 11px; margin-bottom: 2px;">PACKAGE</p>
-                                        <p style="color: #1f2937; font-weight: 500; font-size: 14px; text-transform: capitalize;">${appointment.packageType} Session</p>
+                                        <p style="color: #1f2937; font-weight: 500; font-size: 14px; text-transform: capitalize;">${appointment.packageType} Package</p>
                                     </div>
                                 </div>
                             </div>
@@ -225,17 +222,6 @@ const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
                             </p>
                         </div>
                         ` : ''}
-                        
-                        <div style="background: #f0fdf4; border-radius: 16px; padding: 20px; margin: 25px 0; border: 1px solid #bbf7d0;">
-                            <h4 style="color: #166534; margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">📌 What's next?</h4>
-                            <p style="color: #166534; margin: 0; font-size: 13px; line-height: 1.5;">
-                                ${newStatus === 'confirmed' ? 'Please arrive 10 minutes before your scheduled time. Bring any reference photos or ideas you\'d like to discuss. We look forward to creating beautiful memories with you!' :
-                                  newStatus === 'completed' ? 'Thank you for choosing Maple Photography! You will receive your edited photos within 2-3 weeks. We\'d love to hear about your experience!' :
-                                  newStatus === 'cancelled' ? 'If you need to reschedule, please book a new appointment through our website. We hope to work with you in the future!' :
-                                  newStatus === 'rescheduled' ? 'Please mark your calendar with the new date and time. If you need any changes, contact us as soon as possible.' :
-                                  'You will receive another update once your appointment is confirmed.'}
-                            </p>
-                        </div>
                         
                         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0 20px;">
                         
@@ -257,90 +243,53 @@ const sendStatusUpdateEmail = async (appointment, newStatus, adminMessage) => {
     return info;
 };
 
-// ==================== CREATE ====================
+// ==================== CREATE APPOINTMENT ====================
 export const createAppointment = async (req, res) => {
     try {
+        console.log('📥 Received appointment data:', JSON.stringify(req.body, null, 2));
+        
         const { 
             name, email, phone, packageType, preferredDate, 
             sessionType, location, specialRequests,
             paymentMethod, receiptUrl, transactionReference
         } = req.body;
 
-        // Validate required fields
-        if (!name || !email || !phone || !packageType || !preferredDate || !sessionType || !location || !transactionReference) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please fill in all required fields',
-            });
-        }
-
-        // Check if session is already booked
-        const selectedDate = new Date(preferredDate);
-        selectedDate.setHours(0, 0, 0, 0);
-        
-        const dayStart = new Date(selectedDate);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(selectedDate);
-        dayEnd.setHours(23, 59, 59, 999);
-
-        const existingAppointment = await Appointment.findOne({
-            preferredDate: { $gte: dayStart, $lte: dayEnd },
-            sessionType: sessionType,
-            status: { $nin: ['cancelled'] }
-        });
-
-        if (existingAppointment) {
-            return res.status(400).json({
-                success: false,
-                message: `The ${sessionType} session on this date is already booked. Please select another date or session.`,
-            });
-        }
-
-        const sessionTime = SESSION_TIMES[sessionType];
+        const sessionTime = SESSION_TIMES[sessionType || 'morning'];
 
         const newAppointment = await Appointment.create({
-            name: name.trim(),
-            email: email.trim().toLowerCase(),
-            phone: phone.trim(),
-            packageType: packageType.trim(),
-            preferredDate: new Date(preferredDate),
-            sessionType: sessionType,
-            location: location.trim(),
-            specialRequests: specialRequests ? specialRequests.trim() : '',
+            name: name?.trim() || '',
+            email: email?.trim()?.toLowerCase() || '',
+            phone: phone?.trim() || '',
+            packageType: packageType?.trim() || 'coral',
+            preferredDate: preferredDate ? new Date(preferredDate) : new Date(),
+            sessionType: sessionType || 'morning',
+            location: location?.trim() || '',
+            specialRequests: specialRequests?.trim() || '',
             status: 'pending',
-            transactionReference: transactionReference.trim() || '',
-            paymentMethod: paymentMethod || 'bank',
+            transactionReference: transactionReference?.trim() || '',
+            paymentMethod: paymentMethod || 'gcash',
             receiptUrl: receiptUrl || null
         });
 
+        console.log('✅ Appointment created:', newAppointment._id);
+
         // Send email notifications
         try {
-            await sendNewAppointmentNotification({
-                name: name.trim(),
-                email: email.trim(),
-                phone: phone.trim(),
-                packageType: packageType,
-                preferredDate: preferredDate,
-                sessionType: sessionType,
-                transactionReference: transactionReference.trim() || '',
-                sessionTime: sessionTime,
-                location: location.trim(),
-                specialRequests: specialRequests || ''
-            });
-            
-            await sendClientConfirmationEmail({
-                name: name.trim(),
-                email: email.trim(),
-                packageType: packageType,
-                preferredDate: preferredDate,
-                sessionType: sessionType,
-                transactionReference: transactionReference.trim() || '',
-                sessionTime: sessionTime,
-                location: location.trim(),
-                specialRequests: specialRequests || ''
-            });
-            
-            console.log('✅ Both admin and client emails sent successfully');
+            if (sessionTime) {
+                await sendNewAppointmentNotification({
+                    name: name?.trim() || '',
+                    email: email?.trim() || '',
+                    phone: phone?.trim() || '',
+                    packageType: packageType || 'coral',
+                    preferredDate: preferredDate,
+                    sessionType: sessionType || 'morning',
+                    transactionReference: transactionReference?.trim() || '',
+                    sessionTime: sessionTime,
+                    location: location?.trim() || '',
+                    specialRequests: specialRequests || ''
+                });
+            }
+            console.log('✅ Emails sent successfully');
         } catch (emailError) {
             console.error('❌ Email sending failed:', emailError);
         }
@@ -351,8 +300,11 @@ export const createAppointment = async (req, res) => {
             data: newAppointment,
         });
     } catch (error) {
+        console.error('❌ Create Appointment Error:', error);
+        
         if (error.name === 'ValidationError') {
             const errors = Object.values(error.errors).map(err => err.message);
+            console.log('Validation errors:', errors);
             return res.status(400).json({
                 success: false,
                 message: 'Validation failed',
@@ -360,7 +312,6 @@ export const createAppointment = async (req, res) => {
             });
         }
 
-        console.error('Create Appointment Error:', error);
         res.status(500).json({
             success: false,
             message: 'Internal server error',
@@ -369,7 +320,7 @@ export const createAppointment = async (req, res) => {
     }
 };
 
-// ==================== READ ====================
+// ==================== GET ALL APPOINTMENTS ====================
 export const getAppointments = async (req, res) => {
     try {
         const appointments = await Appointment.find({
@@ -395,6 +346,7 @@ export const getAppointments = async (req, res) => {
     }
 };
 
+// ==================== GET SINGLE APPOINTMENT ====================
 export const getViewAppointment = async (req, res) => {
     try {
         const { appointmentId } = req.params;
@@ -422,6 +374,7 @@ export const getViewAppointment = async (req, res) => {
     }
 };
 
+// ==================== GET APPOINTMENTS BY STATUS ====================
 export const getAppointmentsByStatus = async (req, res) => {
     try {
         const { status } = req.params;
@@ -453,6 +406,7 @@ export const getAppointmentsByStatus = async (req, res) => {
     }
 };
 
+// ==================== GET CONFIRMED APPOINTMENTS ====================
 export const getConfirmedAppointments = async (req, res) => {
     try {
         const today = new Date();
@@ -480,6 +434,7 @@ export const getConfirmedAppointments = async (req, res) => {
     }
 };
 
+// ==================== GET UPCOMING APPOINTMENTS ====================
 export const getUpcomingAppointments = async (req, res) => {
     try {
         const today = new Date();
@@ -509,6 +464,7 @@ export const getUpcomingAppointments = async (req, res) => {
     }
 };
 
+// ==================== CONFIRM APPOINTMENT (Quick) ====================
 export const confirmAppointment = async (req, res) => {
     try {
         const { appointmentId } = req.params;
@@ -531,7 +487,10 @@ export const confirmAppointment = async (req, res) => {
         
         const updatedAppointment = await Appointment.findByIdAndUpdate(
             appointmentId,
-            { status: 'confirmed' },
+            { 
+                status: 'confirmed',
+                confirmedDate: new Date()
+            },
             { new: true }
         );
         
@@ -550,11 +509,17 @@ export const confirmAppointment = async (req, res) => {
     }
 };
 
-// ==================== UPDATE ====================
+// ==================== UPDATE APPOINTMENT ====================
 export const updateAppointment = async (req, res) => {
     try {
         const { appointmentId } = req.params;
-        const { status, notes, sendEmail, adminMessage, rescheduleDate, rescheduleSession } = req.body;
+        const { 
+            status, notes, sendEmail, adminMessage, 
+            rescheduleDate, rescheduleSession,
+            downpaymentAmount, remainingAmount, totalAmount, paymentCompleted
+        } = req.body;
+        
+        console.log('📥 Update appointment data:', JSON.stringify(req.body, null, 2));
         
         const appointment = await Appointment.findById(appointmentId);
         
@@ -567,13 +532,53 @@ export const updateAppointment = async (req, res) => {
         
         const oldStatus = appointment.status;
         
+        // Update basic fields
         appointment.status = status;
-        if (notes) appointment.notes = notes;
+        if (notes !== undefined) appointment.notes = notes;
         appointment.updatedAt = Date.now();
         
-        // Handle reschedule - update the date and session
+        // ==================== PAYMENT HANDLING ====================
+        
+        // When confirming - save downpayment (20% already paid online)
+        if (status === 'confirmed') {
+            if (downpaymentAmount !== undefined && downpaymentAmount !== '') {
+                appointment.downpaymentAmount = parseFloat(downpaymentAmount) || 0;
+            }
+            if (totalAmount !== undefined && totalAmount !== '') {
+                appointment.totalAmount = parseFloat(totalAmount) || 0;
+            }
+            if (remainingAmount !== undefined && remainingAmount !== '') {
+                appointment.remainingAmount = parseFloat(remainingAmount) || 0;
+            }
+            // Set confirmed date
+            appointment.confirmedDate = new Date();
+            console.log(`💰 Confirmed - Downpayment: ₱${appointment.downpaymentAmount}, Total: ₱${appointment.totalAmount}, Remaining: ₱${appointment.remainingAmount}`);
+        }
+        
+        // When completing - save remaining payment (80% paid in person)
+        if (status === 'completed') {
+            if (remainingAmount !== undefined && remainingAmount !== '') {
+                appointment.remainingAmount = parseFloat(remainingAmount) || 0;
+            }
+            if (paymentCompleted !== undefined) {
+                appointment.paymentCompleted = paymentCompleted === true || paymentCompleted === 'true';
+            }
+            
+            // Recalculate total if both downpayment and remaining exist
+            const downpayment = parseFloat(appointment.downpaymentAmount) || 0;
+            const remaining = parseFloat(appointment.remainingAmount) || 0;
+            if (downpayment > 0 || remaining > 0) {
+                appointment.totalAmount = downpayment + remaining;
+            }
+            if (appointment.paymentCompleted) {
+                appointment.paymentAmount = appointment.totalAmount; // Full payment recorded
+            }
+            
+            console.log(`💰 Completed - Downpayment: ₱${downpayment}, Remaining: ₱${remaining}, Total: ₱${appointment.totalAmount}, Payment Completed: ${appointment.paymentCompleted}`);
+        }
+        
+        // ==================== RESCHEDULE HANDLING ====================
         if (status === 'rescheduled' && rescheduleDate && rescheduleSession) {
-            // Check if new session is available
             const selectedDate = new Date(rescheduleDate);
             selectedDate.setHours(0, 0, 0, 0);
             
@@ -599,11 +604,18 @@ export const updateAppointment = async (req, res) => {
             appointment.preferredDate = new Date(rescheduleDate);
             appointment.sessionType = rescheduleSession;
             appointment.rescheduledDate = new Date();
-            console.log(`✅ Appointment rescheduled to ${rescheduleDate} (${rescheduleSession} session)`);
+            console.log(`🔄 Rescheduled to ${rescheduleDate} (${rescheduleSession} session)`);
+        }
+        
+        // Handle cancellation
+        if (status === 'cancelled') {
+            appointment.deletedAt = new Date();
         }
         
         await appointment.save();
+        console.log('✅ Appointment saved successfully');
         
+        // Send email notification if status changed
         const shouldSendEmail = sendEmail === true && oldStatus !== status;
         
         if (shouldSendEmail) {
@@ -666,7 +678,7 @@ export const bulkDeleteAppointments = async (req, res) => {
     }
 };
 
-// ==================== DELETE ====================
+// ==================== DELETE SINGLE APPOINTMENT ====================
 export const deleteAppointment = async (req, res) => {
     try {
         const { appointmentId } = req.params;

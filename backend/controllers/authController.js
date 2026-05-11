@@ -303,3 +303,251 @@ export const getUserProfile = async (req, res) => {
         });
     }
 };
+
+const resetOTPStore = new Map();
+
+// Send password reset confirmation email
+const sendPasswordResetConfirmation = async (email) => {
+    const mailOptions = {
+        from: `"Admin Portal Security" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: '🔒 Password Reset Confirmation',
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div style="max-width: 500px; margin: 50px auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px;">🔐 Password Reset</h1>
+                        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0;">Security Confirmation</p>
+                    </div>
+                    
+                    <div style="padding: 40px 30px;">
+                        <h2 style="color: #333; margin-top: 0;">Password Changed Successfully</h2>
+                        <p style="color: #666; line-height: 1.6;">
+                            Your password for the Maple Street Photography admin portal has been successfully changed.
+                        </p>
+                        
+                        <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px; margin: 25px 0; border-radius: 8px;">
+                            <p style="color: #166534; margin: 0; font-size: 14px;">
+                                <strong>✅ Password Reset Details:</strong><br>
+                                • Date: ${new Date().toLocaleString()}<br>
+                                • Account: ${email}
+                            </p>
+                        </div>
+                        
+                        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 25px 0; border-radius: 8px;">
+                            <p style="color: #92400e; margin: 0; font-size: 13px;">
+                                <strong>⚠️ Security Alert:</strong> If you did not request this change, 
+                                please contact us immediately as your account may be compromised.
+                            </p>
+                        </div>
+                        
+                        <p style="color: #999; font-size: 13px; margin-top: 25px;">
+                            This is an automated security notification. Please do not reply to this email.
+                        </p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+
+// Send password reset OTP email
+const sendResetOTPEmail = async (email, otp) => {
+    const mailOptions = {
+        from: `"Admin Portal Security" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: '🔑 Password Reset Verification Code',
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div style="max-width: 500px; margin: 50px auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px;">Password Reset Request</h1>
+                        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0;">Identity Verification Required</p>
+                    </div>
+                    
+                    <div style="padding: 40px 30px;">
+                        <h2 style="color: #333; margin-top: 0;">Reset Your Password</h2>
+                        <p style="color: #666; line-height: 1.6;">Use this verification code to complete your password reset:</p>
+                        
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; text-align: center; margin: 30px 0;">
+                            <div style="font-size: 42px; font-weight: bold; letter-spacing: 8px; color: #d97706; font-family: monospace;">
+                                ${otp}
+                            </div>
+                        </div>
+                        
+                        <p style="color: #666; font-size: 14px;">This code will expire in <strong>10 minutes</strong>.</p>
+                        
+                        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 20px 0; border-radius: 8px;">
+                            <p style="color: #92400e; margin: 0; font-size: 13px;">
+                                <strong>⚠️ Security Alert:</strong> If you did not request this password reset, 
+                                please ignore this email. Your account remains secure.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+// Forgot Password - Send Reset OTP
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        const user = await User.findOne({ email });
+        if (!user) {
+            // Don't reveal if user exists or not for security
+            return res.status(200).json({
+                success: true,
+                message: 'If this email is registered, a reset code has been sent.'
+            });
+        }
+        
+        const otpCode = generateOTP();
+        const expires = Date.now() + 10 * 60 * 1000;
+        
+        resetOTPStore.set(email, { otp: otpCode, expires, verified: false });
+        
+        // Send reset OTP email
+        sendResetOTPEmail(email, otpCode).catch(console.error);
+        
+        res.status(200).json({
+            success: true,
+            message: 'Password reset code sent successfully'
+        });
+        
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send reset code'
+        });
+    }
+};
+
+// Verify Reset OTP
+export const verifyResetOTP = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        
+        const storedData = resetOTPStore.get(email);
+        
+        if (!storedData) {
+            return res.status(401).json({
+                success: false,
+                message: 'No reset code found. Please request a new one.'
+            });
+        }
+        
+        if (storedData.otp !== otp) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid reset code'
+            });
+        }
+        
+        if (storedData.expires < Date.now()) {
+            resetOTPStore.delete(email);
+            return res.status(401).json({
+                success: false,
+                message: 'Reset code has expired. Please request a new one.'
+            });
+        }
+        
+        // Mark as verified
+        storedData.verified = true;
+        
+        res.status(200).json({
+            success: true,
+            message: 'Code verified successfully'
+        });
+        
+    } catch (error) {
+        console.error('Verify reset OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify code'
+        });
+    }
+};
+
+// Reset Password
+export const resetPassword = async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        
+        // Verify OTP again for security
+        const storedData = resetOTPStore.get(email);
+        
+        if (!storedData || !storedData.verified) {
+            return res.status(401).json({
+                success: false,
+                message: 'Please verify your identity first'
+            });
+        }
+        
+        if (storedData.otp !== otp) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid reset code'
+            });
+        }
+        
+        // Find user and update password
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+        
+        user.password = newPassword;
+        await user.save();
+        
+        // Clear OTP data
+        resetOTPStore.delete(email);
+        
+        // Clear trusted devices for this email (security measure)
+        for (const [key, value] of trustedDevices.entries()) {
+            if (value.email === email) {
+                trustedDevices.delete(key);
+            }
+        }
+        
+        // Send confirmation email
+        sendPasswordResetConfirmation(email).catch(console.error);
+        
+        res.status(200).json({
+            success: true,
+            message: 'Password reset successfully'
+        });
+        
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to reset password'
+        });
+    }
+};

@@ -1,1 +1,17 @@
+
 @import "tailwindcss";
+
+/* Import all your fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* Create custom font utilities */
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Optional: Set default body font */
+body {
+  font-family: var(--font-sans);
+}

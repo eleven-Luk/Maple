@@ -181,42 +181,49 @@ function AboutMaple() {
         setSelectedVideo(behindScenesVideos[newIndex]);
     };
 
-    // Book a session button handler
-    const handleBookSession = () => {
-        window.location.href = '/contact';
-    };
-
     return (
         <div className='min-h-screen bg-gradient-to-b from-gray-50 to-white'>
-            {/* Hero Section - Responsive height */}
+            {/* Navigation Bar - ADDED CONSISTENT STYLING */}
+            <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <img 
+                                src={NielLogo} 
+                                alt="Logo"   
+                                className="w-10 h-10 rounded-lg shadow-sm border border-gray-200 object-cover"
+                            />
+                            <div>
+                                <h1 className="text-lg font-semibold text-gray-900">About Us</h1>
+                                <p className="text-xs text-gray-500">Maple Street Photography</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-9">
+                            <button
+                                onClick={() => window.location.href = '/samples'}
+                                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors px-3 py-2 rounded-lg hover:bg-gray-100"
+                            >
+                                <span className="text-sm">View Samples</span>
+                            </button>
+                            <button
+                                onClick={() => window.location.href = '/main'}
+                                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                            >
+                                <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4" />
+                                <span className="hidden sm:inline">Back to Home</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            {/* Hero Section - REMOVED OLD BUTTONS */}
             <div className='relative h-[50vh] sm:h-[60vh] md:h-[70vh] min-h-[400px] sm:min-h-[450px] md:min-h-[500px] overflow-hidden bg-gray-900'>
                 {/* Background */}
                 <div className='absolute inset-0 bg-gradient-to-r from-gray-900 to-gray-800'></div>
                 
                 {/* Overlay */}
                 <div className='absolute inset-0 bg-black/40'></div>
-                
-                {/* Button for home - Responsive positioning */}
-                <div className='absolute top-3 sm:top-4 md:top-6 left-3 sm:left-4 md:left-6 z-20'>
-                    <button
-                        onClick={() => window.location.href = '/main'}
-                        className='flex items-center gap-1 sm:gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300 border border-white/20 hover:border-white/30'
-                    >
-                        <FontAwesomeIcon icon={faArrowLeft} className='w-3 h-3 sm:w-4 sm:h-4' />
-                        <span className='text-xs sm:text-sm font-medium hidden sm:inline'>Back to Home</span>
-                    </button>
-                </div>
-
-                {/* Button for Samples - Responsive positioning */}
-                <div className='absolute top-3 sm:top-4 md:top-6 right-3 sm:right-4 md:right-6 z-20'>
-                    <button
-                        onClick={() => window.location.href = '/samples'}
-                        className='flex items-center gap-1 sm:gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300 border border-white/20 hover:border-white/30'
-                    >
-                        <span className='text-xs sm:text-sm font-medium hidden sm:inline'>View Samples</span>
-                        <FontAwesomeIcon icon={faArrowRight} className='w-3 h-3 sm:w-4 sm:h-4' />
-                    </button>
-                </div>
                 
                 {/* Content - Responsive padding and text sizes */}
                 <div className='absolute inset-0 flex items-center justify-center z-10 px-4'>

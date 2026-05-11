@@ -287,12 +287,28 @@ function EditModal({ isOpen, onClose, onSave, appointment }) {
                 notes: formData.notes,
                 sendEmail: formData.sendEmail,
                 adminMessage: formData.adminMessage,
-                // Payment data
-                downpaymentAmount: formData.downpaymentAmount,
-                remainingAmount: formData.remainingAmount,
-                totalAmount: formData.totalAmount,
-                paymentCompleted: formData.paymentCompleted
             };
+            
+            // Add payment data when confirming (downpayment)
+            if (formData.status === 'confirmed') {
+                appointmentData.downpaymentAmount = parseFloat(formData.downpaymentAmount) || 0;
+                // Calculate total based on downpayment (20% = downpayment, 100% = downpayment * 5)
+                appointmentData.totalAmount = (parseFloat(formData.downpaymentAmount) || 0) * 5;
+                appointmentData.remainingAmount = appointmentData.totalAmount - (parseFloat(formData.downpaymentAmount) || 0);
+            }
+            
+            // Add payment data when completing (remaining balance)
+            if (formData.status === 'completed') {
+                appointmentData.remainingAmount = parseFloat(formData.remainingAmount) || 0;
+                appointmentData.paymentCompleted = formData.paymentCompleted;
+                
+                // If downpayment exists, calculate total
+                if (appointment?.downpaymentAmount || formData.downpaymentAmount) {
+                    const downpayment = parseFloat(appointment?.downpaymentAmount || formData.downpaymentAmount) || 0;
+                    const remaining = parseFloat(formData.remainingAmount) || 0;
+                    appointmentData.totalAmount = downpayment + remaining;
+                }
+            }
             
             // Add reschedule data if status is rescheduled
             if (formData.status === 'rescheduled' && formData.showRescheduleFields) {

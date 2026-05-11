@@ -83,7 +83,7 @@ function Body() {
                         <button
                             onClick={() => setIsModalOpen(true)}
                             className="group bg-white text-gray-900 px-8 py-3 rounded-full text-base font-medium
-                                     hover:bg-gray-100 transition-all duration-300 flex items-center gap-2 shadow-sm"
+                                     hover:bg-amber-300 transition-all hover:scale-105 duration-300 flex items-center gap-2 shadow-sm"
                         >
                             <FontAwesomeIcon icon={faCalendarCheck} className="text-gray-600 group-hover:text-gray-900" />
                             Book a session
